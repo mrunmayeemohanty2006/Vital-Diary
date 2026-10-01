@@ -1,16 +1,45 @@
-# React + Vite
+# Vital Diary
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Vital Diary is a personal healthcare platform for storing and managing medical records in one place.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+* **Landing Page** — Clean introduction to Vital Diary.
+* **Authentication** — Patient login/signup using email and password.
+* **Dashboard**
 
-## React Compiler
+  * Personalized time-based greeting
+  * Current date
+  * Health-related predefined message
+  * Health snapshot
+  * Quick actions
+  * Recent activity
+  * Lab trend visualization based on available report data
+* **Medical Reports** — Upload and manage medical reports.
+* **Prescriptions** — Upload and manage prescription documents.
+* **Vitals & Metrics** — Manually record health measurements such as weight, blood pressure, heart rate, blood glucose, and blood oxygen.
+* **Medicines** — Add and manage medicines with dosage, frequency, timing, and dates.
+* **Search** — Search through stored health records using deterministic search.
+* **Health Profile** — Store basic personal health information.
+* **Get Insights** — View health information derived from available medical records.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Design
 
-## Expanding the Oxlint configuration
+* Green & white healthcare theme
+* Clean and minimal UI
+* Responsive design
+* Reusable React components
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+## Tech Stack
+
+* React
+* TypeScript
+* Vite
+* Supabase
+
+## Developer
+
+**Mrunmayee Mohanty**
+GitHub: `mrunmayeemohanty2006`
+
+> Vital Diary is currently under development.
