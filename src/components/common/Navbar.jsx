@@ -1,11 +1,15 @@
-import React from 'react';
-import { Activity, ShieldCheck, User, LogOut, FileText, Database } from 'lucide-react';
+import React, { useState } from 'react';
+import { Activity, LogOut, Menu, X, LayoutDashboard, UploadCloud, TrendingUp, Search, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { isSupabaseConfigured } from '../../services/supabase';
 
-export default function Navbar({ activePage, setActivePage, onOpenSupabaseModal }) {
+export default function Navbar({ activePage, setActivePage }) {
   const { user, isAuthenticated, logout } = useAuth();
-  const supabaseConnected = isSupabaseConfigured();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleNavClick = (page) => {
+    setActivePage(page);
+    setMobileMenuOpen(false);
+  };
 
   return (
     <header className="site-navbar">
@@ -14,7 +18,7 @@ export default function Navbar({ activePage, setActivePage, onOpenSupabaseModal 
         <div
           className="brand-logo"
           style={{ cursor: 'pointer' }}
-          onClick={() => setActivePage(isAuthenticated ? 'dashboard' : 'home')}
+          onClick={() => handleNavClick(isAuthenticated ? 'dashboard' : 'home')}
         >
           <div className="logo-icon-wrap">
             <Activity size={22} strokeWidth={2.5} />
@@ -26,20 +30,20 @@ export default function Navbar({ activePage, setActivePage, onOpenSupabaseModal 
           </div>
         </div>
 
-        {/* Center / Navigation Links */}
+        {/* Desktop Navigation Links */}
         <nav className="nav-links">
           {!isAuthenticated ? (
             <>
               <span
                 className={`nav-link ${activePage === 'home' ? 'active' : ''}`}
-                onClick={() => setActivePage('home')}
+                onClick={() => handleNavClick('home')}
               >
                 Overview
               </span>
               <span
                 className={`nav-link ${activePage === 'features' ? 'active' : ''}`}
                 onClick={() => {
-                  setActivePage('home');
+                  handleNavClick('home');
                   setTimeout(() => {
                     const el = document.getElementById('features-section');
                     if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -51,7 +55,7 @@ export default function Navbar({ activePage, setActivePage, onOpenSupabaseModal 
               <span
                 className={`nav-link ${activePage === 'security' ? 'active' : ''}`}
                 onClick={() => {
-                  setActivePage('home');
+                  handleNavClick('home');
                   setTimeout(() => {
                     const el = document.getElementById('security-section');
                     if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -65,25 +69,25 @@ export default function Navbar({ activePage, setActivePage, onOpenSupabaseModal 
             <>
               <span
                 className={`nav-link ${activePage === 'dashboard' ? 'active' : ''}`}
-                onClick={() => setActivePage('dashboard')}
+                onClick={() => handleNavClick('dashboard')}
               >
                 Dashboard
               </span>
               <span
                 className={`nav-link ${activePage === 'upload' ? 'active' : ''}`}
-                onClick={() => setActivePage('upload')}
+                onClick={() => handleNavClick('upload')}
               >
                 Upload Record
               </span>
               <span
                 className={`nav-link ${activePage === 'insights' ? 'active' : ''}`}
-                onClick={() => setActivePage('insights')}
+                onClick={() => handleNavClick('insights')}
               >
                 Insights
               </span>
               <span
                 className={`nav-link ${activePage === 'search' ? 'active' : ''}`}
-                onClick={() => setActivePage('search')}
+                onClick={() => handleNavClick('search')}
               >
                 Search Records
               </span>
@@ -93,35 +97,15 @@ export default function Navbar({ activePage, setActivePage, onOpenSupabaseModal 
 
         {/* Right Actions */}
         <div className="nav-actions">
-          {/* Supabase Status indicator button */}
-          <button
-            onClick={onOpenSupabaseModal}
-            className="btn btn-outline btn-sm"
-            title="Supabase Storage & Database Settings"
-            style={{ fontSize: '0.78rem', gap: '0.4rem' }}
-          >
-            <Database size={14} className={supabaseConnected ? 'text-emerald' : ''} />
-            <span>{supabaseConnected ? 'Supabase Connected' : 'Connect Supabase'}</span>
-            <span
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                backgroundColor: supabaseConnected ? 'var(--color-success)' : '#f59e0b',
-                display: 'inline-block',
-              }}
-            />
-          </button>
-
           {!isAuthenticated ? (
             <button
               className="btn btn-primary btn-sm"
-              onClick={() => setActivePage('login')}
+              onClick={() => handleNavClick('login')}
             >
-              Sign In / Access
+              Sign In
             </button>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <div
                 className="user-profile-badge"
                 title={`${user.name} (${user.role === 'doctor' ? 'Doctor' : 'Patient'})`}
@@ -129,29 +113,123 @@ export default function Navbar({ activePage, setActivePage, onOpenSupabaseModal 
                 <div className="user-avatar-circle">
                   {user.avatar || (user.name ? user.name[0].toUpperCase() : 'U')}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div className="user-meta-wrap">
                   <span className="user-meta-name">{user.name}</span>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--color-primary-dark)', textTransform: 'capitalize' }}>
+                  <span className="user-meta-role">
                     {user.role}
                   </span>
                 </div>
               </div>
 
               <button
-                className="btn btn-outline btn-sm"
+                className="btn btn-outline btn-sm logout-btn"
                 onClick={() => {
                   logout();
-                  setActivePage('home');
+                  handleNavClick('home');
                 }}
                 title="Sign Out"
-                style={{ padding: '0.4rem 0.65rem' }}
               >
                 <LogOut size={15} />
               </button>
             </div>
           )}
+
+          {/* Mobile Hamburger Menu Button */}
+          <button
+            type="button"
+            className="mobile-menu-toggle"
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            aria-label="Toggle navigation menu"
+          >
+            {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
         </div>
       </div>
+
+      {/* Mobile Dropdown Navigation Menu */}
+      {mobileMenuOpen && (
+        <div className="mobile-nav-dropdown">
+          {!isAuthenticated ? (
+            <>
+              <button
+                type="button"
+                className={`mobile-nav-item ${activePage === 'home' ? 'active' : ''}`}
+                onClick={() => handleNavClick('home')}
+              >
+                Overview
+              </button>
+              <button
+                type="button"
+                className={`mobile-nav-item ${activePage === 'features' ? 'active' : ''}`}
+                onClick={() => {
+                  handleNavClick('home');
+                  setTimeout(() => {
+                    const el = document.getElementById('features-section');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}
+              >
+                Features
+              </button>
+              <button
+                type="button"
+                className={`mobile-nav-item ${activePage === 'security' ? 'active' : ''}`}
+                onClick={() => {
+                  handleNavClick('home');
+                  setTimeout(() => {
+                    const el = document.getElementById('security-section');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }}
+              >
+                Privacy & Security
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm mobile-auth-btn"
+                onClick={() => handleNavClick('login')}
+              >
+                Sign In / Access Portal
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className={`mobile-nav-item ${activePage === 'dashboard' ? 'active' : ''}`}
+                onClick={() => handleNavClick('dashboard')}
+              >
+                <LayoutDashboard size={18} />
+                <span>Dashboard</span>
+              </button>
+              <button
+                type="button"
+                className={`mobile-nav-item ${activePage === 'upload' ? 'active' : ''}`}
+                onClick={() => handleNavClick('upload')}
+              >
+                <UploadCloud size={18} />
+                <span>Upload Record</span>
+              </button>
+              <button
+                type="button"
+                className={`mobile-nav-item ${activePage === 'insights' ? 'active' : ''}`}
+                onClick={() => handleNavClick('insights')}
+              >
+                <TrendingUp size={18} />
+                <span>Health Insights</span>
+              </button>
+              <button
+                type="button"
+                className={`mobile-nav-item ${activePage === 'search' ? 'active' : ''}`}
+                onClick={() => handleNavClick('search')}
+              >
+                <Search size={18} />
+                <span>Search Records</span>
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </header>
   );
 }

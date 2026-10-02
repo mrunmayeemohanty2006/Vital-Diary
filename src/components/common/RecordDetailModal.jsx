@@ -173,9 +173,11 @@ export default function RecordDetailModal({ record, onClose }) {
               border: '1px solid var(--color-border)',
               borderRadius: 'var(--radius-md)',
               backgroundColor: 'var(--color-mint-50)',
+              flexWrap: 'wrap',
+              gap: '0.75rem',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 200px' }}>
               <div
                 style={{
                   width: 38,
@@ -187,12 +189,13 @@ export default function RecordDetailModal({ record, onClose }) {
                   justifyContent: 'center',
                   color: 'var(--color-primary)',
                   border: '1px solid var(--color-mint-200)',
+                  flexShrink: 0,
                 }}
               >
                 <FileText size={20} />
               </div>
-              <div>
-                <strong style={{ fontSize: '0.875rem', display: 'block', color: 'var(--color-text-primary)' }}>
+              <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                <strong style={{ fontSize: '0.875rem', display: 'block', color: 'var(--color-text-primary)', wordBreak: 'break-word' }}>
                   {record.fileName || `${record.title}.pdf`}
                 </strong>
                 <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
@@ -204,7 +207,7 @@ export default function RecordDetailModal({ record, onClose }) {
             <button
               onClick={handleDownload}
               className="btn btn-primary btn-sm"
-              style={{ gap: '0.35rem' }}
+              style={{ gap: '0.35rem', flexShrink: 0 }}
             >
               <Download size={14} />
               <span>Download</span>

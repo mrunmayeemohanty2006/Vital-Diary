@@ -4,17 +4,12 @@ import {
   UploadCloud,
   TrendingUp,
   Search,
-  Database,
   Shield,
-  FileCheck2,
-  ChevronRight,
 } from 'lucide-react';
 import { useRecords } from '../../context/RecordsContext';
-import { isSupabaseConfigured } from '../../services/supabase';
 
-export default function Sidebar({ activeTab, setActiveTab, onOpenSupabaseModal }) {
+export default function Sidebar({ activeTab, setActiveTab }) {
   const { records } = useRecords();
-  const supabaseConnected = isSupabaseConfigured();
 
   const navItems = [
     {
@@ -27,7 +22,7 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenSupabaseModal }
       id: 'upload',
       label: 'Upload Record',
       icon: UploadCloud,
-      badge: 'New',
+      badge: null,
     },
     {
       id: 'insights',
@@ -79,19 +74,6 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenSupabaseModal }
           <Shield size={14} className="text-emerald" style={{ color: 'var(--color-primary)' }} />
           <span>AES-256 Encrypted Vault</span>
         </div>
-
-        {/* Supabase Status button */}
-        <button
-          className="supabase-status-btn"
-          onClick={onOpenSupabaseModal}
-          title="Click to configure Supabase storage connection"
-        >
-          <span className={`status-dot ${supabaseConnected ? '' : 'offline'}`} />
-          <span style={{ flex: 1 }}>
-            {supabaseConnected ? 'Supabase Storage: Active' : 'Storage: Local Fallback'}
-          </span>
-          <Database size={13} />
-        </button>
       </div>
     </aside>
   );

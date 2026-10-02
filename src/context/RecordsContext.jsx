@@ -183,8 +183,24 @@ export function RecordsProvider({ children }) {
     return results;
   };
 
-  const deleteRecord = (id) => {
+  const deleteRecord = async (id) => {
+    const recordToDelete = records.find((r) => r.id === id);
     setRecords((prev) => prev.filter((r) => r.id !== id));
+
+    // Also attempt deletion from Supabase table if configured
+    const client = getSupabase();
+    if (client && recordToDelete) {
+      try {
+        if (recordToDelete.title) {
+          await client
+            .from('medical_records')
+            .delete()
+            .eq('title', recordToDelete.title);
+        }
+      } catch (dbErr) {
+        console.warn('Supabase DB table delete notice:', dbErr.message);
+      }
+    }
   };
 
   const getRecordById = (id) => {

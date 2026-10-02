@@ -4,7 +4,6 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { RecordsProvider } from './context/RecordsContext';
 import Navbar from './components/common/Navbar';
 import Sidebar from './components/common/Sidebar';
-import SupabaseModal from './components/common/SupabaseModal';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -18,7 +17,6 @@ function AppContent() {
   const [activePage, setActivePage] = useState('home'); // 'home', 'login', 'dashboard'
   const [dashboardTab, setDashboardTab] = useState('dashboard'); // 'dashboard', 'upload', 'insights', 'search'
   const [loginRole, setLoginRole] = useState('patient');
-  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
 
   // If user is authenticated, route them to their dashboard or respective tab
   const handleGetStarted = () => {
@@ -58,7 +56,6 @@ function AppContent() {
             setActivePage(page);
           }
         }}
-        onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -95,7 +92,6 @@ function AppContent() {
                 <Sidebar
                   activeTab={dashboardTab}
                   setActiveTab={setDashboardTab}
-                  onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
                 />
 
                 <div className="dashboard-main">
@@ -105,7 +101,6 @@ function AppContent() {
                   {dashboardTab === 'upload' && (
                     <UploadPage
                       onUploadComplete={(tab) => setDashboardTab(tab || 'dashboard')}
-                      onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
                     />
                   )}
                   {dashboardTab === 'insights' && (
@@ -118,12 +113,6 @@ function AppContent() {
           </>
         )}
       </main>
-
-      {/* Supabase Connection Modal */}
-      <SupabaseModal
-        isOpen={isSupabaseModalOpen}
-        onClose={() => setIsSupabaseModalOpen(false)}
-      />
     </div>
   );
 }

@@ -1,21 +1,12 @@
 import React from 'react';
 import {
   TrendingUp,
-  Activity,
-  Heart,
-  Droplets,
-  Calendar,
-  CheckCircle2,
-  FileCheck2,
-  FileText,
   UploadCloud,
-  PieChart,
 } from 'lucide-react';
 import { useRecords } from '../context/RecordsContext';
-import HealthTrendChart from '../components/common/HealthTrendChart';
 
 export default function InsightsPage({ onNavigateTab }) {
-  const { records, vitals } = useRecords();
+  const { records } = useRecords();
 
   // Dynamic category breakdown from real records
   const categoryCounts = records.reduce((acc, r) => {
@@ -36,7 +27,7 @@ export default function InsightsPage({ onNavigateTab }) {
           Health Insights & Long-term Analytics
         </h1>
         <p style={{ fontSize: '0.9375rem', color: 'var(--color-text-secondary)' }}>
-          Basic framework for future health insights, biomarker trajectories, and medical history summaries.
+          Clinical distribution and categorized summaries derived directly from your medical diary.
         </p>
       </div>
 
@@ -57,7 +48,7 @@ export default function InsightsPage({ onNavigateTab }) {
             No Health Insights Available Yet
           </h2>
           <p style={{ fontSize: '0.9375rem', color: 'var(--color-text-secondary)', maxWidth: '480px', margin: '0 auto 1.5rem' }}>
-            Upload medical reports, blood tests, or clinical summaries to generate personalized category distributions and longitudinal trend graphs.
+            Upload medical reports, blood tests, or clinical summaries to generate personalized category distributions and analytics.
           </p>
           <button
             className="btn btn-primary"
@@ -130,14 +121,6 @@ export default function InsightsPage({ onNavigateTab }) {
           </div>
         </>
       )}
-
-      {/* Longitudinal Metric History */}
-      <div style={{ marginBottom: '2.5rem' }}>
-        <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem', color: 'var(--color-text-primary)' }}>
-          Longitudinal Metric History
-        </h3>
-        <HealthTrendChart onUploadClick={() => onNavigateTab('upload')} />
-      </div>
     </div>
   );
 }
