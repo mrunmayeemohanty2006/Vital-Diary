@@ -4,12 +4,17 @@ import {
   UploadCloud,
   TrendingUp,
   Search,
+  QrCode,
   Shield,
 } from 'lucide-react';
 import { useRecords } from '../../context/RecordsContext';
+import { useAuth } from '../../context/AuthContext';
+import { getPatientActiveSession } from '../../lib/access-session';
 
 export default function Sidebar({ activeTab, setActiveTab }) {
+  const { user } = useAuth();
   const { records } = useRecords();
+  const activeSession = getPatientActiveSession(user?.id);
 
   const navItems = [
     {
@@ -20,21 +25,28 @@ export default function Sidebar({ activeTab, setActiveTab }) {
     },
     {
       id: 'upload',
-      label: 'Upload Record',
+      label: 'Upload Report',
       icon: UploadCloud,
       badge: null,
     },
     {
       id: 'insights',
-      label: 'Get Insights',
+      label: 'Get Inside',
       icon: TrendingUp,
       badge: null,
     },
     {
       id: 'search',
-      label: 'Search Records',
+      label: 'Search Record',
       icon: Search,
       badge: records.length ? `${records.length}` : null,
+    },
+    {
+      id: 'qr',
+      label: 'Generate QR',
+      icon: QrCode,
+      badge: activeSession?.status === 'active' ? 'Active' : activeSession ? 'Pending' : null,
+      badgeColor: activeSession?.status === 'active' ? '#10b981' : undefined,
     },
   ];
 

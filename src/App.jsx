@@ -10,12 +10,13 @@ import DashboardPage from './pages/DashboardPage';
 import UploadPage from './pages/UploadPage';
 import InsightsPage from './pages/InsightsPage';
 import SearchPage from './pages/SearchPage';
+import GenerateQRPage from './pages/GenerateQRPage';
 import DoctorPortal from './pages/DoctorPortal';
 
 function AppContent() {
   const { user, isAuthenticated } = useAuth();
   const [activePage, setActivePage] = useState('home'); // 'home', 'login', 'dashboard'
-  const [dashboardTab, setDashboardTab] = useState('dashboard'); // 'dashboard', 'upload', 'insights', 'search'
+  const [dashboardTab, setDashboardTab] = useState('dashboard'); // 'dashboard', 'upload', 'insights', 'search', 'qr'
   const [loginRole, setLoginRole] = useState('patient');
 
   // If user is authenticated, route them to their dashboard or respective tab
@@ -49,9 +50,18 @@ function AppContent() {
       <Navbar
         activePage={activePage === 'dashboard' ? dashboardTab : activePage}
         setActivePage={(page) => {
-          if (['dashboard', 'upload', 'insights', 'search'].includes(page)) {
-            setActivePage('dashboard');
-            setDashboardTab(page);
+          const doctorTabs = ['dashboard', 'patients', 'activity', 'profile'];
+          const patientTabs = ['dashboard', 'upload', 'insights', 'search', 'qr'];
+          const validTabs = user?.role === 'doctor' ? doctorTabs : patientTabs;
+
+          if (validTabs.includes(page) || doctorTabs.includes(page) || patientTabs.includes(page)) {
+            if (!isAuthenticated) {
+              setLoginRole('patient');
+              setActivePage('login');
+            } else {
+              setActivePage('dashboard');
+              setDashboardTab(page);
+            }
           } else {
             setActivePage(page);
           }
@@ -69,7 +79,7 @@ function AppContent() {
         )}
 
         {/* Login / Auth Page */}
-        {activePage === 'login' && (
+        {(activePage === 'login' || (activePage === 'dashboard' && !isAuthenticated)) && (
           <LoginPage
             initialRole={loginRole}
             onSuccess={handleLoginSuccess}
@@ -77,11 +87,12 @@ function AppContent() {
         )}
 
         {/* Authenticated Dashboard Views */}
-        {activePage === 'dashboard' && (
+        {activePage === 'dashboard' && isAuthenticated && (
           <>
             {user?.role === 'doctor' ? (
               <div style={{ padding: '2rem 1.5rem' }}>
                 <DoctorPortal
+                  initialTab={['dashboard', 'patients', 'activity', 'profile'].includes(dashboardTab) ? dashboardTab : 'dashboard'}
                   onSwitchToPatientView={() => {
                     setDashboardTab('dashboard');
                   }}
@@ -107,6 +118,9 @@ function AppContent() {
                     <InsightsPage onNavigateTab={setDashboardTab} />
                   )}
                   {dashboardTab === 'search' && <SearchPage />}
+                  {dashboardTab === 'qr' && (
+                    <GenerateQRPage onNavigateTab={setDashboardTab} />
+                  )}
                 </div>
               </div>
             )}

@@ -65,6 +65,33 @@ export default function Navbar({ activePage, setActivePage }) {
                 Privacy & Security
               </span>
             </>
+          ) : user?.role === 'doctor' ? (
+            <>
+              <span
+                className={`nav-link ${activePage === 'dashboard' ? 'active' : ''}`}
+                onClick={() => handleNavClick('dashboard')}
+              >
+                Dashboard
+              </span>
+              <span
+                className={`nav-link ${activePage === 'patients' ? 'active' : ''}`}
+                onClick={() => handleNavClick('patients')}
+              >
+                Patients
+              </span>
+              <span
+                className={`nav-link ${activePage === 'activity' ? 'active' : ''}`}
+                onClick={() => handleNavClick('activity')}
+              >
+                Access Activity
+              </span>
+              <span
+                className={`nav-link ${activePage === 'profile' ? 'active' : ''}`}
+                onClick={() => handleNavClick('profile')}
+              >
+                Profile
+              </span>
+            </>
           ) : (
             <>
               <span
@@ -190,6 +217,41 @@ export default function Navbar({ activePage, setActivePage }) {
                 onClick={() => handleNavClick('login')}
               >
                 Sign In / Access Portal
+              </button>
+            </>
+          ) : user?.role === 'doctor' ? (
+            <>
+              <button
+                type="button"
+                className={`mobile-nav-item ${activePage === 'dashboard' ? 'active' : ''}`}
+                onClick={() => handleNavClick('dashboard')}
+              >
+                <LayoutDashboard size={18} />
+                <span>Dashboard</span>
+              </button>
+              <button
+                type="button"
+                className={`mobile-nav-item ${activePage === 'patients' ? 'active' : ''}`}
+                onClick={() => handleNavClick('patients')}
+              >
+                <Users size={18} />
+                <span>Patients</span>
+              </button>
+              <button
+                type="button"
+                className={`mobile-nav-item ${activePage === 'activity' ? 'active' : ''}`}
+                onClick={() => handleNavClick('activity')}
+              >
+                <Activity size={18} />
+                <span>Access Activity</span>
+              </button>
+              <button
+                type="button"
+                className={`mobile-nav-item ${activePage === 'profile' ? 'active' : ''}`}
+                onClick={() => handleNavClick('profile')}
+              >
+                <ShieldCheck size={18} />
+                <span>Doctor Profile</span>
               </button>
             </>
           ) : (

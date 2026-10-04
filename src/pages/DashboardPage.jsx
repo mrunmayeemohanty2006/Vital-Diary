@@ -3,17 +3,20 @@ import {
   FileText,
   ChevronRight,
   UploadCloud,
+  QrCode,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useRecords } from '../context/RecordsContext';
 import HealthTrendChart from '../components/common/HealthTrendChart';
 import RecordCard from '../components/common/RecordCard';
 import RecordDetailModal from '../components/common/RecordDetailModal';
+import { getPatientActiveSession } from '../lib/access-session';
 
 export default function DashboardPage({ onNavigateTab }) {
   const { user } = useAuth();
   const { records } = useRecords();
   const [selectedRecord, setSelectedRecord] = useState(null);
+  const activeSession = getPatientActiveSession(user?.id);
 
   // Dynamic greeting based on current time
   const getGreeting = () => {
@@ -29,7 +32,7 @@ export default function DashboardPage({ onNavigateTab }) {
   return (
     <div className="dashboard-content-area">
       {/* Personalized Greeting Header */}
-      <div className="greeting-section">
+      <div className="greeting-section" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 className="greeting-title">
             {getGreeting()}, {user?.name || 'User'}
@@ -40,6 +43,16 @@ export default function DashboardPage({ onNavigateTab }) {
               : 'Welcome to your private health diary. Keep your medical files secure and organized in one place.'}
           </p>
         </div>
+
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={() => onNavigateTab('qr')}
+          style={{ gap: '0.45rem', padding: '0.6rem 1.15rem', boxShadow: '0 2px 8px rgba(4, 120, 87, 0.25)' }}
+        >
+          <QrCode size={16} />
+          <span>{activeSession?.status === 'active' ? 'Active Doctor Access' : activeSession ? 'View QR Session' : 'Generate QR Access'}</span>
+        </button>
       </div>
 
       {/* Large Health Trend Graph Across Main Screen */}

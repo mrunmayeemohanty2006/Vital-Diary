@@ -19,26 +19,29 @@ const MONTH_NAMES = [
 ];
 
 function parseDateInfo(record) {
-  const rawDate = record.date || record.uploadedAt || '';
+  const rawDate = record?.date || record?.uploadedAt || '';
   let d = new Date(rawDate);
 
   if (isNaN(d.getTime())) {
-    // If standard parse failed, try YYYY-MM-DD
+    // If standard parse failed, try YYYY-MM-DD or DD/MM/YYYY
     const parts = String(rawDate).split(/[-/]/);
     if (parts.length >= 3) {
-      const year = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1;
-      const day = parseInt(parts[2], 10);
-      d = new Date(year, month, day);
-    } else {
-      d = new Date();
+      if (parts[0].length === 4) {
+        d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      } else if (parts[2].length === 4) {
+        d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      }
     }
   }
 
-  const year = d.getFullYear();
-  const monthIndex = d.getMonth();
+  if (isNaN(d.getTime())) {
+    d = new Date();
+  }
+
+  const year = d.getFullYear() || new Date().getFullYear();
+  const monthIndex = isNaN(d.getMonth()) ? new Date().getMonth() : d.getMonth();
   const monthName = MONTH_NAMES[monthIndex] || 'Unknown Month';
-  const day = d.getDate();
+  const day = isNaN(d.getDate()) ? new Date().getDate() : d.getDate();
   const dateKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
   const formattedDate = d.toLocaleDateString('en-US', {
@@ -48,8 +51,7 @@ function parseDateInfo(record) {
     year: 'numeric',
   });
 
-  // Calculate timestamp for sorting (fallback to uploadedAt timestamp)
-  const uploadedTimestamp = record.uploadedAt ? new Date(record.uploadedAt).getTime() : 0;
+  const uploadedTimestamp = record?.uploadedAt ? new Date(record.uploadedAt).getTime() : 0;
   const sortScore = d.getTime() + (uploadedTimestamp % 86400000);
 
   return {

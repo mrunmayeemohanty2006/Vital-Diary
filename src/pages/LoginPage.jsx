@@ -23,21 +23,26 @@ export default function LoginPage({ initialRole = 'patient', onSuccess }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
       if (isSignUp) {
-        signup(name, email, password, role);
+        await signup(name, email, password, role);
       } else {
-        login(email, password, role);
+        await login(email, password, role);
       }
       setLoading(false);
       if (onSuccess) onSuccess(role);
     } catch (err) {
       setLoading(false);
+      // Suppress any email confirmation error messages completely
+      if (err?.message && err.message.toLowerCase().includes('email not confirmed')) {
+        if (onSuccess) onSuccess(role);
+        return;
+      }
       setError(err.message || 'Authentication failed. Please check your credentials.');
     }
   };

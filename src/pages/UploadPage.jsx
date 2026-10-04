@@ -8,12 +8,10 @@ import {
   CheckCircle2,
   Trash2,
   Database,
-  ArrowRight,
   ShieldCheck,
   Lock,
-  Sparkles,
-  FilePlus2,
-  X,
+  Loader2,
+  Activity,
 } from 'lucide-react';
 import { useRecords } from '../context/RecordsContext';
 import { isSupabaseConfigured } from '../services/supabase';
@@ -29,6 +27,7 @@ export default function UploadPage({ onUploadComplete }) {
   const [detectedFolderName, setDetectedFolderName] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState('');
   const [uploadedBatch, setUploadedBatch] = useState(null);
   const [selectedRecord, setSelectedRecord] = useState(null);
 
@@ -83,10 +82,16 @@ export default function UploadPage({ onUploadComplete }) {
   const handleUploadSubmit = async () => {
     if (stagedFiles.length === 0) return;
     setLoading(true);
+    setProcessingStatus('Initializing 100% on-device OCR engine...');
 
     try {
-      const savedRecords = await addBatchRecords(stagedFiles, detectedFolderName);
+      const savedRecords = await addBatchRecords(
+        stagedFiles,
+        detectedFolderName,
+        (statusMsg) => setProcessingStatus(statusMsg)
+      );
       setLoading(false);
+      setProcessingStatus('');
       setUploadedBatch({
         folderName: detectedFolderName,
         records: savedRecords,
@@ -97,6 +102,7 @@ export default function UploadPage({ onUploadComplete }) {
       setDetectedFolderName('');
     } catch (err) {
       setLoading(false);
+      setProcessingStatus('');
       alert('Failed to upload files: ' + err.message);
     }
   };
@@ -117,7 +123,7 @@ export default function UploadPage({ onUploadComplete }) {
         <div>
           <h1 className="upload-title">Medical File & Report Upload</h1>
           <p className="upload-subtitle">
-            Securely upload diagnostic reports, imaging scans, prescriptions, and lab test results to your health vault.
+            Securely upload diagnostic reports, imaging scans, prescriptions, and lab test results to your health vault with 100% local on-device OCR.
           </p>
         </div>
       </div>
@@ -130,7 +136,7 @@ export default function UploadPage({ onUploadComplete }) {
             Storage Destination:{' '}
             <strong>
               {supabaseConnected
-                ? 'Supabase Cloud Vault (Bucket: vital-records)'
+                ? 'Supabase Cloud Vault (Bucket: medical-files)'
                 : 'Local Encrypted Vault (Zero-Knowledge)'}
             </strong>
           </span>
@@ -174,7 +180,7 @@ export default function UploadPage({ onUploadComplete }) {
           Drag & Drop Medical Reports or Folders
         </h3>
         <p className="upload-dropzone-desc">
-          Supported formats: PDF, PNG, JPG, DOCX, TXT. Documents are encrypted, categorized, and cataloged automatically.
+          Supported formats: PDF, PNG, JPG, WebP, DOCX, TXT. Documents are analyzed, extracted, encrypted, and cataloged automatically.
         </p>
 
         {/* Buttons for File and Folder Selection */}
@@ -232,19 +238,44 @@ export default function UploadPage({ onUploadComplete }) {
                 className="btn btn-primary btn-sm"
                 onClick={handleUploadSubmit}
                 disabled={loading}
-                style={{ minWidth: 160 }}
+                style={{ minWidth: 180 }}
               >
                 {loading ? (
-                  <span>Encrypting & Saving...</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Loader2 size={14} className="spin-animate" />
+                    <span>Extracting & Saving...</span>
+                  </span>
                 ) : (
                   <>
                     <Lock size={14} />
-                    <span>Save {stagedFiles.length} Files</span>
+                    <span>Process {stagedFiles.length} Files</span>
                   </>
                 )}
               </button>
             </div>
           </div>
+
+          {/* Real-time processing progress banner */}
+          {loading && processingStatus && (
+            <div
+              style={{
+                marginTop: '1rem',
+                padding: '0.75rem 1rem',
+                backgroundColor: 'var(--color-mint-50)',
+                border: '1px solid var(--color-mint-200)',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.65rem',
+                fontSize: '0.85rem',
+                color: 'var(--color-primary-dark)',
+                fontWeight: 600,
+              }}
+            >
+              <Activity size={16} className="text-emerald spin-animate" />
+              <span>{processingStatus}</span>
+            </div>
+          )}
 
           {/* Staged Files Table */}
           <div className="file-table-container">
@@ -289,7 +320,7 @@ export default function UploadPage({ onUploadComplete }) {
                       <td>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-primary-dark)', fontWeight: 600 }}>
                           <ShieldCheck size={13} className="text-emerald" />
-                          Ready
+                          Ready for Local OCR
                         </span>
                       </td>
                       <td style={{ textAlign: 'right' }}>
@@ -321,10 +352,10 @@ export default function UploadPage({ onUploadComplete }) {
             </div>
             <div>
               <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
-                {uploadedBatch.count} {uploadedBatch.count === 1 ? 'Report' : 'Reports'} Successfully Uploaded & Encrypted
+                {uploadedBatch.count} {uploadedBatch.count === 1 ? 'Report' : 'Reports'} Extracted & Encrypted
               </h4>
               <p style={{ fontSize: '0.85rem', color: 'var(--color-primary-dark)', marginTop: '0.15rem' }}>
-                All records have been cataloged below in your Medical Reports gallery.
+                All records and clinical measurements have been cataloged below in your Medical Reports gallery.
               </p>
             </div>
           </div>

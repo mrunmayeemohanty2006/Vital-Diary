@@ -1,34 +1,53 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileText,
-  Image as ImageIcon,
   Calendar,
   Building2,
-  UserCheck,
   Download,
   Eye,
   Trash2,
-  ShieldCheck,
   FileSpreadsheet,
-  FileCode,
   HardDrive,
-  Clock,
 } from 'lucide-react';
 import { useRecords } from '../../context/RecordsContext';
+import { renderPdfFirstPageThumbnail } from '../../lib/ocr';
 
 export default function MedicalReportGalleryCard({ record, onSelectRecord }) {
   const { deleteRecord } = useRecords();
 
-  if (!record) return null;
-
   const isImage =
-    record.fileType === 'image' ||
-    (record.fileName && /\.(png|jpe?g|webp|gif|svg)$/i.test(record.fileName)) ||
-    (record.fileUrl && record.fileUrl.startsWith('data:image'));
+    record?.fileType === 'image' ||
+    (record?.fileName && /\.(png|jpe?g|webp|gif|svg)$/i.test(record.fileName)) ||
+    (record?.fileUrl && record.fileUrl.startsWith('data:image'));
 
   const isPdf =
-    record.fileType === 'pdf' ||
-    (record.fileName && /\.pdf$/i.test(record.fileName));
+    record?.fileType === 'pdf' ||
+    (record?.fileName && /\.pdf$/i.test(record.fileName));
+
+  const [coverUrl, setCoverUrl] = useState(
+    record?.thumbnailUrl || (isImage && record?.fileUrl ? record.fileUrl : null)
+  );
+
+  useEffect(() => {
+    if (!record) return;
+    if (record.thumbnailUrl) {
+      setCoverUrl(record.thumbnailUrl);
+    } else if (isImage && record.fileUrl) {
+      setCoverUrl(record.fileUrl);
+    } else if (isPdf && record.fileUrl) {
+      let isCancelled = false;
+      renderPdfFirstPageThumbnail(record.fileUrl, 450).then((thumb) => {
+        if (!isCancelled && thumb) {
+          setCoverUrl(thumb);
+        }
+      });
+      return () => {
+        isCancelled = true;
+      };
+    }
+  }, [record, record?.thumbnailUrl, record?.fileUrl, isImage, isPdf]);
+
+  if (!record) return null;
 
   const getFormatBadge = () => {
     if (record.fileName) {
@@ -67,7 +86,12 @@ export default function MedicalReportGalleryCard({ record, onSelectRecord }) {
       a.click();
       document.body.removeChild(a);
     } else {
-      const content = `VITAL DIARY - MEDICAL REPORT\n\nTitle: ${record.title}\nCategory: ${record.category}\nDate: ${record.date}\nProvider: ${record.provider || 'N/A'}\nDoctor: ${record.doctor || 'N/A'}\n\nClinical Summary:\n${record.notes || 'No remarks.'}`;
+      let metricsText = '';
+      if (record.extractedMetrics && record.extractedMetrics.length > 0) {
+        metricsText = '\n\nExtracted Clinical Measurements:\n' +
+          record.extractedMetrics.map(m => `• ${m.name}: ${m.displayValue}`).join('\n');
+      }
+      const content = `VITAL DIARY - MEDICAL REPORT\n\nTitle: ${record.title}\nCategory: ${record.category}\nDate: ${record.date}\nProvider: ${record.provider || 'N/A'}\nDoctor: ${record.doctor || 'N/A'}\n\nClinical Summary:\n${record.notes || 'No remarks.'}${metricsText}`;
       const blob = new Blob([content], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -87,18 +111,21 @@ export default function MedicalReportGalleryCard({ record, onSelectRecord }) {
     }
   };
 
+  // Only display non-automated user notes on the card to keep the initial interface clean
+  const hasUserCustomNotes = record.notes && !record.notes.startsWith('Extracted ');
+
   return (
     <div
       className="gallery-report-card"
       onClick={() => onSelectRecord(record)}
-      title="Click to view full preview and details"
+      title="Click to inspect extracted vitals and document details"
     >
-      {/* Visual Preview Header */}
+      {/* Visual Preview Header (First page of PDF or Image as cover) */}
       <div className="gallery-card-preview">
-        {isImage && record.fileUrl ? (
+        {coverUrl ? (
           <div className="gallery-card-img-wrap">
             <img
-              src={record.fileUrl}
+              src={coverUrl}
               alt={record.title}
               className="gallery-card-img"
               loading="lazy"
@@ -140,7 +167,7 @@ export default function MedicalReportGalleryCard({ record, onSelectRecord }) {
         </div>
       </div>
 
-      {/* Card Info Body */}
+      {/* Card Info Body (Clean & Minimalist) */}
       <div className="gallery-card-body">
         <h4 className="gallery-card-title" title={record.title}>
           {record.title}
@@ -160,7 +187,7 @@ export default function MedicalReportGalleryCard({ record, onSelectRecord }) {
           )}
         </div>
 
-        {record.notes && (
+        {hasUserCustomNotes && (
           <p className="gallery-card-notes">
             {record.notes}
           </p>
@@ -200,7 +227,7 @@ export default function MedicalReportGalleryCard({ record, onSelectRecord }) {
             type="button"
             className="gallery-action-btn view-btn"
             onClick={() => onSelectRecord(record)}
-            title="View details"
+            title="View details & extracted metrics"
           >
             <Eye size={13} />
             <span>View</span>

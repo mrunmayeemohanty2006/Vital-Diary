@@ -37,30 +37,9 @@ export default function SupabaseModal({ isOpen, onClose }) {
   };
 
   const sqlSchema = `-- Supabase SQL Setup for Vital Diary
--- 1. Create medical_records table
-create table if not exists public.medical_records (
-  id uuid primary key default gen_random_uuid(),
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  title text not null,
-  category text not null,
-  provider text,
-  doctor text,
-  record_date date,
-  file_name text,
-  file_size text,
-  file_url text,
-  tags text[],
-  notes text,
-  user_id uuid references auth.users(id) on delete cascade
-);
-
--- 2. Enable Row Level Security (RLS)
-alter table public.medical_records enable row level security;
-
--- 3. Create Storage bucket for medical files
-insert into storage.buckets (id, name, public) 
-values ('vital-records', 'vital-records', true)
-on conflict (id) do nothing;`;
+-- Migration file located at supabase/migrations/20261002000000_init_vital_diary.sql
+-- Tables: profiles, reports, prescriptions, medicines, vitals
+-- Storage: private bucket 'medical-files' with folder-level RLS ({user_id}/{record_id}/{filename})`;
 
   const copySql = () => {
     navigator.clipboard.writeText(sqlSchema);
