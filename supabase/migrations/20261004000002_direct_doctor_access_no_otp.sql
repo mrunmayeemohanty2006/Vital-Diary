@@ -1,15 +1,44 @@
--- Vital Diary Database Migration: Direct Doctor Access (Zero OTP) & Existing Patient Records Authorization
--- Enables seamless cross-device doctor access to existing patient medical reports and storage PDFs
--- Table: patient_access_sessions, reports, storage.objects
+-- ==============================================================================
+-- Vital Diary Database Migration: Direct Doctor QR Access & Medical Records Access
+-- Self-contained migration: Creates patient_access_sessions, RLS policies, Storage permissions, and SECURITY DEFINER RPCs
+-- ==============================================================================
 
--- 1. Alter otp_code in patient_access_sessions to be nullable
-alter table if exists public.patient_access_sessions 
+-- 1. Create patient_access_sessions Table if not exists
+create table if not exists public.patient_access_sessions (
+  id uuid primary key default gen_random_uuid(),
+  session_id text unique not null,
+  patient_id uuid not null references public.profiles(id) on delete cascade,
+  otp_code text default '',
+  duration_minutes integer not null default 30,
+  expires_at timestamp with time zone not null,
+  doctor_id uuid references public.profiles(id),
+  doctor_name text,
+  status text not null default 'pending' check (status in ('pending', 'waiting_scan', 'active', 'expired', 'revoked')),
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  accessed_at timestamp with time zone,
+  revoked_at timestamp with time zone
+);
+
+-- Ensure otp_code is nullable
+alter table public.patient_access_sessions 
   alter column otp_code drop not null;
 
-alter table if exists public.patient_access_sessions 
+alter table public.patient_access_sessions 
   alter column otp_code set default '';
 
+-- Create indexes for high performance lookups
+create index if not exists idx_patient_access_sessions_session_id on public.patient_access_sessions(session_id);
+create index if not exists idx_patient_access_sessions_expires_at on public.patient_access_sessions(expires_at);
+create index if not exists idx_patient_access_sessions_patient_id on public.patient_access_sessions(patient_id);
+create index if not exists idx_patient_access_sessions_doctor_id on public.patient_access_sessions(doctor_id);
+
+-- Enable RLS for patient_access_sessions
+alter table public.patient_access_sessions enable row level security;
+
 -- 2. Access session RLS policies
+drop policy if exists "Patients can view their own access sessions" on public.patient_access_sessions;
+drop policy if exists "Patients can insert their own access sessions" on public.patient_access_sessions;
+drop policy if exists "Patients can update their own access sessions" on public.patient_access_sessions;
 drop policy if exists "Doctors can view active sessions they are assigned to" on public.patient_access_sessions;
 drop policy if exists "Allow session lookup by session_id" on public.patient_access_sessions;
 drop policy if exists "Allow doctor update on access sessions" on public.patient_access_sessions;
@@ -18,12 +47,18 @@ create policy "Allow session lookup by session_id"
   on public.patient_access_sessions for select
   using (true);
 
+create policy "Patients can insert their own access sessions"
+  on public.patient_access_sessions for insert
+  with check (auth.uid() = patient_id or auth.uid() is null);
+
 create policy "Allow doctor update on access sessions"
   on public.patient_access_sessions for update
   using (true);
 
 -- 3. Unified RLS policy on public.reports:
 -- Allows patient to view own reports AND allows doctors with an active unexpired session to view patient's existing reports
+alter table public.reports enable row level security;
+
 drop policy if exists "Users can view their own reports" on public.reports;
 drop policy if exists "Authorized doctors can view patient reports" on public.reports;
 drop policy if exists "Allow reading reports by owner or active session" on public.reports;
@@ -263,5 +298,30 @@ begin
     ),
     'records', v_records
   );
+end;
+$$;
+
+-- 7. SECURITY DEFINER RPC: end_doctor_access_session
+create or replace function public.end_doctor_access_session(
+  p_session_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+begin
+  v_user_id := auth.uid();
+
+  update public.patient_access_sessions
+  set
+    status = 'revoked',
+    revoked_at = now()
+  where session_id = p_session_id
+    and (doctor_id = v_user_id or patient_id = v_user_id or v_user_id is null);
+
+  return jsonb_build_object('success', true);
 end;
 $$;

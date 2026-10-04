@@ -979,14 +979,32 @@ export async function getAuthorizedPatientData(sessionId) {
         // Direct table fallback if RPC was not defined or returned empty
         const savedSessions = JSON.parse(getStoredItem(STORAGE_LOCAL_SESSIONS_KEY) || '{}');
         const localSess = savedSessions[sessionId];
-        const targetUserId = localSess?.patient?.id;
+        let targetUserId = data?.patient?.id || localSess?.patient?.id;
+
+        if (!targetUserId && sessionId.startsWith('vd_sess_')) {
+          const parts = sessionId.split('_');
+          if (parts.length >= 4) {
+            targetUserId = parts.slice(2, parts.length - 2).join('_');
+          }
+        }
 
         if (targetUserId && !targetUserId.startsWith('usr_')) {
-          const { data: dbReports } = await client
-            .from('reports')
-            .select('*')
-            .eq('user_id', targetUserId)
-            .order('created_at', { ascending: false });
+          // Fetch existing patient profile and reports directly
+          const [reportsRes, profileRes] = await Promise.all([
+            client
+              .from('reports')
+              .select('*')
+              .eq('user_id', targetUserId)
+              .order('created_at', { ascending: false }),
+            client
+              .from('profiles')
+              .select('*')
+              .eq('id', targetUserId)
+              .maybeSingle(),
+          ]);
+
+          const dbReports = reportsRes.data;
+          const dbProfile = profileRes.data;
 
           if (dbReports && dbReports.length > 0) {
             const formattedRecords = await Promise.all(
@@ -1026,8 +1044,13 @@ export async function getAuthorizedPatientData(sessionId) {
               })
             );
 
+            const resolvedPatient = dbProfile || localSess?.patient || {
+              id: targetUserId,
+              name: 'Authorized Patient',
+            };
+
             return {
-              patient: localSess?.patient || { id: targetUserId },
+              patient: resolvedPatient,
               records: formattedRecords,
               expiresAt: localSess?.expiresAt || new Date(Date.now() + 30 * 60000).toISOString(),
             };
