@@ -601,7 +601,14 @@ export function parsePatientQRCode(rawString) {
       return {
         sessionId: String(sessionId).trim(),
         patientName: parsed.patientName || parsed.patient_name || parsed.name || '',
-        version: parsed.version || 1,
+        patientId: parsed.patientId || parsed.patient_id || '',
+        bloodGroup: parsed.bloodGroup || parsed.blood_group || '',
+        avatar: parsed.avatar || '',
+        dateOfBirth: parsed.dateOfBirth || parsed.date_of_birth || '',
+        gender: parsed.gender || '',
+        allergies: parsed.allergies || '',
+        expiresInMin: parsed.expiresInMin || parsed.durationMinutes || parsed.duration || 30,
+        version: parsed.version || 2,
         format: 'json',
       };
     } catch (e) {
@@ -626,6 +633,8 @@ export function parsePatientQRCode(rawString) {
         return {
           sessionId: sessionId.trim(),
           patientName: url.searchParams.get('patient') || '',
+          patientId: url.searchParams.get('patientId') || '',
+          expiresInMin: parseInt(url.searchParams.get('duration') || '30', 10),
           format: 'url',
         };
       }
@@ -640,6 +649,8 @@ export function parsePatientQRCode(rawString) {
     return {
       sessionId: clean,
       patientName: '',
+      patientId: '',
+      expiresInMin: 30,
       format: 'token',
     };
   }
@@ -650,15 +661,19 @@ export function parsePatientQRCode(rawString) {
 // --------------------------------------------------------------------------
 // QR Code Generator (For Testing / Reviewer Demo)
 // --------------------------------------------------------------------------
-/**
- * Generates a high-contrast QR Data URL containing only the secure session ID
- */
 export async function generatePatientAccessQRDataUrl(sessionInfo) {
+  const patient = sessionInfo.patient || {};
   const payload = JSON.stringify({
     type: 'vital_diary_access_grant',
-    version: 1,
+    version: 2,
     sessionId: sessionInfo.sessionId,
-    patientName: sessionInfo.patient?.name || sessionInfo.patientName || '',
+    patientName: patient.name || sessionInfo.patientName || '',
+    patientId: patient.id || sessionInfo.patientId || '',
+    bloodGroup: patient.bloodGroup || patient.blood_group || '',
+    avatar: patient.avatar || '',
+    dateOfBirth: patient.dateOfBirth || patient.date_of_birth || '',
+    gender: patient.gender || '',
+    allergies: patient.allergies || '',
     expiresInMin: sessionInfo.durationMinutes || 30,
   });
 
@@ -676,62 +691,28 @@ export async function generatePatientAccessQRDataUrl(sessionInfo) {
 /**
  * Directly Grants Doctor Access upon QR scan based on the duration selected by the patient.
  * NO OTP required.
+ * Fully supports cross-device scanning (mobile/laptop) and Render deployments.
  */
-export async function grantDoctorDirectQRAccess(sessionId, doctorUser = null) {
-  if (!sessionId) throw new Error('Session ID is required.');
-  const cleanSessionId = String(sessionId).trim();
+export async function grantDoctorDirectQRAccess(target, doctorUser = null) {
+  if (!target) throw new Error('Session ID is required.');
 
-  // 1. If Supabase is configured, update session status on backend
-  if (isSupabaseConfigured()) {
+  let cleanSessionId = '';
+  let meta = {};
+
+  if (typeof target === 'object' && target !== null) {
+    cleanSessionId = String(target.sessionId || target.id || target.token || '').trim();
+    meta = target;
+  } else {
     try {
-      const client = getSupabase();
-      if (client) {
-        const { data } = await client
-          .from('patient_access_sessions')
-          .select('*')
-          .eq('session_id', cleanSessionId)
-          .maybeSingle();
-
-        if (data) {
-          const duration = data.duration_minutes || 30;
-          const expiresAt = new Date(Date.now() + duration * 60 * 1000).toISOString();
-          await client
-            .from('patient_access_sessions')
-            .update({
-              status: 'active',
-              doctor_id: doctorUser?.id || 'DOC-4892',
-              doctor_name: doctorUser?.name || 'Dr. Sarah Jenkins, MD',
-              expires_at: expiresAt,
-            })
-            .eq('session_id', cleanSessionId);
-        }
-      }
-    } catch (e) {
-      console.warn('Supabase direct grant notice:', e.message);
+      const parsed = parsePatientQRCode(String(target));
+      cleanSessionId = parsed.sessionId;
+      meta = parsed;
+    } catch {
+      cleanSessionId = String(target).trim();
     }
   }
 
-  // 2. Deterministic Local Access Store
-  const savedSessions = JSON.parse(getStoredItem(STORAGE_LOCAL_SESSIONS_KEY) || '{}');
-  let session = savedSessions[cleanSessionId];
-
-  // If not found in stored sessions, check demo patient list
-  if (!session) {
-    const demo = DEMO_PATIENT_SESSIONS.find((ds) => ds.sessionId === cleanSessionId);
-    if (demo) {
-      session = { ...demo, createdAt: new Date().toISOString() };
-      savedSessions[cleanSessionId] = session;
-    }
-  }
-
-  if (!session) {
-    throw new Error('Invalid or non-existent Patient Access QR.');
-  }
-
-  // Calculate Expiration Timestamp based on patient's selected duration
-  const durationMin = session.durationMinutes || 30;
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + durationMin * 60 * 1000).toISOString();
+  if (!cleanSessionId) throw new Error('Invalid or empty Session ID.');
 
   const doctorProfile = {
     id: doctorUser?.id || 'DOC-4892',
@@ -741,6 +722,132 @@ export async function grantDoctorDirectQRAccess(sessionId, doctorUser = null) {
     license: doctorUser?.license || 'LIC-MED-84920',
     hospital: doctorUser?.hospital || 'Central Healthcare System',
   };
+
+  let session = null;
+
+  // 1. If Supabase is configured, attempt backend lookup & activation
+  if (isSupabaseConfigured()) {
+    try {
+      const client = getSupabase();
+      if (client) {
+        // Try RPC grant_doctor_direct_access
+        try {
+          const { data: rpcData, error: rpcErr } = await client.rpc('grant_doctor_direct_access', {
+            p_session_id: cleanSessionId,
+          });
+          if (!rpcErr && rpcData?.success) {
+            session = {
+              sessionId: cleanSessionId,
+              durationMinutes: rpcData.durationMinutes || meta.expiresInMin || 30,
+              expiresAt: rpcData.expiresAt,
+              status: 'active',
+              patient: rpcData.patient,
+              doctor: doctorProfile,
+            };
+          }
+        } catch {
+          // Fall back to table query if RPC not created yet
+        }
+
+        if (!session) {
+          const { data: dbData } = await client
+            .from('patient_access_sessions')
+            .select('*, profiles:patient_id(*)')
+            .eq('session_id', cleanSessionId)
+            .maybeSingle();
+
+          if (dbData) {
+            const duration = dbData.duration_minutes || meta.expiresInMin || 30;
+            const expiresAt = new Date(Date.now() + duration * 60 * 1000).toISOString();
+            await client
+              .from('patient_access_sessions')
+              .update({
+                status: 'active',
+                doctor_id: doctorProfile.id,
+                doctor_name: doctorProfile.name,
+                expires_at: expiresAt,
+              })
+              .eq('session_id', cleanSessionId);
+
+            session = {
+              sessionId: cleanSessionId,
+              durationMinutes: duration,
+              expiresAt,
+              status: 'active',
+              patient: dbData.profiles || {
+                id: dbData.patient_id,
+                name: meta.patientName || 'Authorized Patient',
+                bloodGroup: meta.bloodGroup || 'O+',
+              },
+              doctor: doctorProfile,
+            };
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Supabase direct grant notice:', e.message);
+    }
+  }
+
+  // 2. Local Sessions Vault on this device
+  const savedSessions = JSON.parse(getStoredItem(STORAGE_LOCAL_SESSIONS_KEY) || '{}');
+  if (!session) {
+    session = savedSessions[cleanSessionId];
+  }
+
+  // 3. Demo Patient sessions
+  if (!session) {
+    const demo = DEMO_PATIENT_SESSIONS.find((ds) => ds.sessionId === cleanSessionId);
+    if (demo) {
+      session = { ...demo, createdAt: new Date().toISOString() };
+    }
+  }
+
+  // 4. Cross-Device / Distributed QR Recovery:
+  // If session is from an authorized Vital Diary QR (e.g. on Render between two devices)
+  if (!session && (cleanSessionId.startsWith('vd_sess_') || meta.patientName || meta.patientId)) {
+    const duration = meta.expiresInMin || 30;
+    const expiresAt = new Date(Date.now() + duration * 60 * 1000).toISOString();
+    
+    // Extract patient ID from session format: vd_sess_{patientId}_{timestamp}_{rand}
+    let extractedPatientId = meta.patientId || '';
+    if (!extractedPatientId && cleanSessionId.startsWith('vd_sess_')) {
+      const parts = cleanSessionId.split('_');
+      if (parts.length >= 4) {
+        extractedPatientId = parts.slice(2, parts.length - 2).join('_') || parts[2];
+      }
+    }
+
+    session = {
+      sessionId: cleanSessionId,
+      durationMinutes: duration,
+      expiresAt,
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      accessedAt: new Date().toISOString(),
+      patient: {
+        id: extractedPatientId || meta.patientId || `pat_${cleanSessionId.substring(8, 20)}`,
+        name: meta.patientName || 'Authorized Patient',
+        avatar: meta.avatar || (meta.patientName ? meta.patientName.substring(0, 2).toUpperCase() : 'PT'),
+        email: meta.email || '',
+        bloodGroup: meta.bloodGroup || 'O+',
+        dateOfBirth: meta.dateOfBirth || '',
+        gender: meta.gender || '',
+        allergies: meta.allergies || '',
+      },
+      doctor: doctorProfile,
+      records: [],
+    };
+  }
+
+  if (!session) {
+    throw new Error('Invalid or non-existent Patient Access QR.');
+  }
+
+  // Calculate Expiration Timestamp based on patient's selected duration
+  const durationMin = session.durationMinutes || meta.expiresInMin || 30;
+  const now = new Date();
+  const expiresAt = session.expiresAt || new Date(now.getTime() + durationMin * 60 * 1000).toISOString();
 
   session.status = 'active';
   session.expiresAt = expiresAt;
@@ -765,7 +872,7 @@ export async function grantDoctorDirectQRAccess(sessionId, doctorUser = null) {
   logDoctorAccess({
     sessionId: cleanSessionId,
     patientId: session.patient?.id,
-    patientName: session.patient?.name || 'Authorized Patient',
+    patientName: session.patient?.name || meta.patientName || 'Authorized Patient',
     doctorName: doctorProfile.name,
     durationMinutes: durationMin,
     expiresAt,
@@ -847,6 +954,57 @@ export async function getAuthorizedPatientData(sessionId) {
             records: formattedRecords,
             expiresAt: data.expiresAt,
           };
+        }
+
+        // Direct table fallback if RPC was not defined or returned empty
+        const savedSessions = JSON.parse(getStoredItem(STORAGE_LOCAL_SESSIONS_KEY) || '{}');
+        const localSess = savedSessions[sessionId];
+        const targetUserId = localSess?.patient?.id;
+
+        if (targetUserId && !targetUserId.startsWith('usr_')) {
+          const { data: dbReports } = await client
+            .from('reports')
+            .select('*')
+            .eq('user_id', targetUserId)
+            .order('created_at', { ascending: false });
+
+          if (dbReports && dbReports.length > 0) {
+            const formattedRecords = await Promise.all(
+              dbReports.map(async (r) => {
+                let fileUrl = r.file_url || '';
+                if (r.file_path && !fileUrl.startsWith('data:')) {
+                  const signed = await getSignedFileUrl(r.file_path, 3600);
+                  if (signed) fileUrl = signed;
+                }
+                return {
+                  id: r.id,
+                  title: r.title,
+                  category: r.category,
+                  provider: r.provider || '',
+                  doctor: r.doctor || '',
+                  date: r.date || '',
+                  uploadedAt: r.created_at,
+                  fileName: r.file_name || 'medical_report',
+                  fileSize: r.file_size || 'Document',
+                  fileType: r.file_type || 'pdf',
+                  fileUrl,
+                  tags: r.tags || [],
+                  notes: r.notes || '',
+                  status: r.status || 'Verified',
+                  extractedMetrics: r.extracted_metrics || [],
+                  results: r.results || {},
+                  isMedicalReport: r.is_medical_report ?? true,
+                  validationMessage: r.validation_message || '',
+                };
+              })
+            );
+
+            return {
+              patient: localSess.patient,
+              records: formattedRecords,
+              expiresAt: localSess.expiresAt || new Date(Date.now() + 30 * 60000).toISOString(),
+            };
+          }
         }
       }
     } catch (err) {

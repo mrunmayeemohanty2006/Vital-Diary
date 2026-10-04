@@ -111,7 +111,7 @@ export default function DoctorPortal({ onSwitchToPatientView, initialTab = 'dash
       };
 
       // Step: Direct QR Scan Access Grant (Patient's pre-configured timer begins)
-      const verifyResult = await grantDoctorDirectQRAccess(qrData.sessionId, doctorProfile);
+      const verifyResult = await grantDoctorDirectQRAccess(qrData, doctorProfile);
       const authorizedData = await getAuthorizedPatientData(verifyResult.sessionId);
 
       const sessionObj = {
