@@ -1,17 +1,18 @@
--- Vital Diary Database Migration: Direct Doctor Access (Zero OTP)
--- Makes otp_code optional / nullable in patient_access_sessions
--- Adds direct doctor grant RPC and updates get_authorized_patient_records
+-- Vital Diary Database Migration: Direct Doctor Access (Zero OTP) & Existing Patient Records Authorization
+-- Enables seamless cross-device doctor access to existing patient medical reports and storage PDFs
+-- Table: patient_access_sessions, reports, storage.objects
 
--- 1. Alter otp_code to be nullable with default ''
+-- 1. Alter otp_code in patient_access_sessions to be nullable
 alter table if exists public.patient_access_sessions 
   alter column otp_code drop not null;
 
 alter table if exists public.patient_access_sessions 
   alter column otp_code set default '';
 
--- 2. Ensure RLS policies allow doctor lookup and activation
+-- 2. Access session RLS policies
 drop policy if exists "Doctors can view active sessions they are assigned to" on public.patient_access_sessions;
 drop policy if exists "Allow session lookup by session_id" on public.patient_access_sessions;
+drop policy if exists "Allow doctor update on access sessions" on public.patient_access_sessions;
 
 create policy "Allow session lookup by session_id"
   on public.patient_access_sessions for select
@@ -21,7 +22,47 @@ create policy "Allow doctor update on access sessions"
   on public.patient_access_sessions for update
   using (true);
 
--- 3. SECURITY DEFINER RPC: grant_doctor_direct_access
+-- 3. Unified RLS policy on public.reports:
+-- Allows patient to view own reports AND allows doctors with an active unexpired session to view patient's existing reports
+drop policy if exists "Users can view their own reports" on public.reports;
+drop policy if exists "Authorized doctors can view patient reports" on public.reports;
+drop policy if exists "Allow reading reports by owner or active session" on public.reports;
+
+create policy "Allow reading reports by owner or active session"
+  on public.reports for select
+  using (
+    -- 1. Owner of report
+    auth.uid() = user_id
+    -- 2. Doctor / user with active unexpired session for this patient
+    or exists (
+      select 1 from public.patient_access_sessions pas
+      where pas.patient_id = public.reports.user_id
+        and pas.status = 'active'
+        and pas.expires_at > now()
+    )
+  );
+
+-- 4. Storage RLS policy on storage.objects for bucket 'medical-files':
+-- Allows patient to read own files AND allows doctors with active session to read/sign patient PDF files
+drop policy if exists "Users can read own medical files" on storage.objects;
+drop policy if exists "Allow reading medical files by owner or active session" on storage.objects;
+
+create policy "Allow reading medical files by owner or active session"
+  on storage.objects for select
+  using (
+    bucket_id = 'medical-files'
+    and (
+      (auth.uid()::text = (storage.foldername(name))[1])
+      or exists (
+        select 1 from public.patient_access_sessions pas
+        where pas.patient_id::text = (storage.foldername(name))[1]
+          and pas.status = 'active'
+          and pas.expires_at > now()
+      )
+    )
+  );
+
+-- 5. SECURITY DEFINER RPC: grant_doctor_direct_access
 -- Directly activates access session for scanning doctor without OTP
 create or replace function public.grant_doctor_direct_access(
   p_session_id text
@@ -91,10 +132,120 @@ begin
     'patient', jsonb_build_object(
       'id', coalesce(v_patient.id, v_session.patient_id),
       'name', coalesce(v_patient.name, 'Authorized Patient'),
+      'email', v_patient.email,
       'avatar', v_patient.avatar,
       'dateOfBirth', v_patient.date_of_birth,
       'bloodGroup', v_patient.blood_group
     )
+  );
+end;
+$$;
+
+-- 6. SECURITY DEFINER RPC: get_authorized_patient_records
+-- Securely retrieves medical records for a patient ONLY while session is active and unexpired.
+create or replace function public.get_authorized_patient_records(
+  p_session_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, storage
+as $$
+declare
+  v_session record;
+  v_patient record;
+  v_records jsonb;
+  v_doctor_id uuid;
+begin
+  v_doctor_id := auth.uid();
+
+  -- Find active session
+  select * into v_session
+  from public.patient_access_sessions
+  where session_id = p_session_id
+    and status = 'active';
+
+  if not found then
+    return jsonb_build_object(
+      'success', false,
+      'error', 'No active authorized session found for this QR code.'
+    );
+  end if;
+
+  -- Check expiration timestamp
+  if v_session.expires_at < now() then
+    update public.patient_access_sessions
+    set status = 'expired'
+    where id = v_session.id;
+
+    return jsonb_build_object(
+      'success', false,
+      'error', 'Authorized access duration has expired.'
+    );
+  end if;
+
+  -- If doctor is authenticated and doctor_id is not yet set, update it
+  if v_doctor_id is not null and (v_session.doctor_id is null or v_session.doctor_id != v_doctor_id) then
+    update public.patient_access_sessions
+    set doctor_id = v_doctor_id
+    where id = v_session.id;
+  end if;
+
+  -- Retrieve patient profile info
+  select id, name, email, avatar, date_of_birth, blood_group into v_patient
+  from public.profiles
+  where id = v_session.patient_id;
+
+  -- Retrieve all existing reports of this patient
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', r.id,
+        'user_id', r.user_id,
+        'title', r.title,
+        'category', r.category,
+        'provider', r.provider,
+        'doctor', r.doctor,
+        'date', r.date,
+        'file_name', r.file_name,
+        'file_size', r.file_size,
+        'file_type', r.file_type,
+        'file_path', r.file_path,
+        'folder_name', r.folder_name,
+        'relative_path', r.relative_path,
+        'tags', r.tags,
+        'notes', r.notes,
+        'status', r.status,
+        'ocr_confidence', r.ocr_confidence,
+        'ocr_source', r.ocr_source,
+        'is_medical_report', r.is_medical_report,
+        'validation_message', r.validation_message,
+        'extracted_metrics', r.extracted_metrics,
+        'results', r.results,
+        'created_at', r.created_at,
+        'updated_at', r.updated_at
+      )
+      order by r.date desc nulls last, r.created_at desc
+    ),
+    '[]'::jsonb
+  )
+  into v_records
+  from public.reports r
+  where r.user_id = v_session.patient_id;
+
+  return jsonb_build_object(
+    'success', true,
+    'sessionId', v_session.session_id,
+    'expiresAt', v_session.expires_at,
+    'patient', jsonb_build_object(
+      'id', coalesce(v_patient.id, v_session.patient_id),
+      'name', coalesce(v_patient.name, 'Authorized Patient'),
+      'email', v_patient.email,
+      'avatar', v_patient.avatar,
+      'dateOfBirth', v_patient.date_of_birth,
+      'bloodGroup', v_patient.blood_group
+    ),
+    'records', v_records
   );
 end;
 $$;

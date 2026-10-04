@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   FileText,
@@ -11,11 +11,31 @@ import {
   Database,
   Activity,
   AlertTriangle,
+  ExternalLink,
+  Eye,
 } from 'lucide-react';
 import { useRecords } from '../../context/RecordsContext';
+import { getSignedFileUrl } from '../../lib/supabase';
 
 export default function RecordDetailModal({ record, onClose, isReadOnly = false }) {
   const { deleteRecord } = useRecords();
+  const [resolvedUrl, setResolvedUrl] = useState(record?.fileUrl || '');
+
+  useEffect(() => {
+    let isMounted = true;
+    if (record?.fileUrl) {
+      setResolvedUrl(record.fileUrl);
+    } else if (record?.filePath || record?.file_path) {
+      getSignedFileUrl(record.filePath || record.file_path, 3600)
+        .then((url) => {
+          if (isMounted && url) setResolvedUrl(url);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [record]);
 
   if (!record) return null;
 
@@ -26,10 +46,20 @@ export default function RecordDetailModal({ record, onClose, isReadOnly = false 
     }
   };
 
+  const handleViewPdf = () => {
+    const urlToOpen = resolvedUrl || record.fileUrl;
+    if (urlToOpen) {
+      window.open(urlToOpen, '_blank', 'noopener,noreferrer');
+    } else {
+      handleDownload();
+    }
+  };
+
   const handleDownload = () => {
-    if (record.fileUrl) {
+    const urlToDownload = resolvedUrl || record.fileUrl;
+    if (urlToDownload) {
       const a = document.createElement('a');
-      a.href = record.fileUrl;
+      a.href = urlToDownload;
       a.download = record.fileName || 'medical_record.pdf';
       document.body.appendChild(a);
       a.click();
@@ -365,14 +395,28 @@ export default function RecordDetailModal({ record, onClose, isReadOnly = false 
               </div>
             </div>
 
-            <button
-              onClick={handleDownload}
-              className="btn btn-primary btn-sm"
-              style={{ gap: '0.35rem', flexShrink: 0 }}
-            >
-              <Download size={14} />
-              <span>Download File</span>
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={handleViewPdf}
+                className="btn btn-outline btn-sm"
+                style={{ gap: '0.35rem', backgroundColor: '#ffffff' }}
+              >
+                <Eye size={14} />
+                <span>View PDF</span>
+                <ExternalLink size={12} />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDownload}
+                className="btn btn-primary btn-sm"
+                style={{ gap: '0.35rem' }}
+              >
+                <Download size={14} />
+                <span>Download File</span>
+              </button>
+            </div>
           </div>
         </div>
 

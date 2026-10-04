@@ -200,5 +200,105 @@ describe('Vital Diary — Zero-OTP Direct QR Access Flow', () => {
       expect(patients[0].id).toBe('pat_registered_jane_doe');
       expect(patients[0].name).toBe('Jane Doe');
     });
+
+    it('should allow doctor to view existing uploaded reports including PDF file URLs when active access is granted', async () => {
+      // Step 1: Patient has existing uploaded reports with PDF files
+      const registeredPatient = {
+        id: 'pat_registered_arthur_dent',
+        name: 'Arthur Dent',
+        email: 'arthur.dent@example.com',
+        bloodGroup: 'AB+',
+        dateOfBirth: '1979-03-11',
+      };
+
+      const existingUploadedReports = [
+        {
+          id: 'rep_arthur_pdf_01',
+          userId: registeredPatient.id,
+          title: 'Comprehensive Metabolic Panel Report',
+          category: 'Lab Results',
+          provider: 'Metropolitan Clinical Laboratories',
+          doctor: 'Dr. Robert Hayes, MD',
+          date: '2026-09-28',
+          fileName: 'Arthur_Metabolic_Panel_Sept2026.pdf',
+          fileSize: '480 KB',
+          fileType: 'pdf',
+          filePath: `${registeredPatient.id}/rep_arthur_pdf_01/Arthur_Metabolic_Panel_Sept2026.pdf`,
+          fileUrl: 'https://storage.vitaldiary.io/medical-files/Arthur_Metabolic_Panel_Sept2026.pdf',
+          tags: ['CMP', 'Metabolic', 'Kidney', 'Liver'],
+          notes: 'Fasting panel unremarkable. Normal renal function.',
+          status: 'Verified',
+          isMedicalReport: true,
+          extractedMetrics: [
+            { name: 'Fasting Glucose', value: '92', unit: 'mg/dL', status: 'normal' },
+            { name: 'Serum Creatinine', value: '0.88', unit: 'mg/dL', status: 'normal' },
+          ],
+        },
+        {
+          id: 'rep_arthur_pdf_02',
+          userId: registeredPatient.id,
+          title: '12-Lead Resting ECG Report',
+          category: 'Cardiology',
+          provider: 'Heart Rhythm Associates',
+          doctor: 'Dr. Michael Sterling, FACC',
+          date: '2026-09-15',
+          fileName: 'Arthur_ECG_Sept2026.pdf',
+          fileSize: '620 KB',
+          fileType: 'pdf',
+          filePath: `${registeredPatient.id}/rep_arthur_pdf_02/Arthur_ECG_Sept2026.pdf`,
+          fileUrl: 'https://storage.vitaldiary.io/medical-files/Arthur_ECG_Sept2026.pdf',
+          tags: ['ECG', 'Cardiology', 'Sinus Rhythm'],
+          notes: 'Sinus rhythm at 72 bpm. Normal intervals.',
+          status: 'Verified',
+          isMedicalReport: true,
+          extractedMetrics: [
+            { name: 'Heart Rate', value: '72', unit: 'bpm', status: 'normal' },
+          ],
+        },
+      ];
+
+      // Step 2: Patient generates temporary QR access session
+      const accessSession = await createPatientAccessSession({
+        patient: registeredPatient,
+        records: existingUploadedReports,
+        durationMinutes: 45,
+      });
+
+      expect(accessSession.sessionId).toBeDefined();
+      expect(accessSession.status).toBe('waiting_scan');
+
+      // Step 3: Doctor scans QR -> Access Granted directly (Zero-OTP)
+      const scanningDoctor = {
+        id: 'doc_sarah_jenkins',
+        name: 'Dr. Sarah Jenkins, MD',
+        email: 'sarah.jenkins@vitaldiary.io',
+        specialty: 'Cardiology & Internal Medicine',
+      };
+
+      const grantResult = await grantDoctorDirectQRAccess(accessSession.sessionId, scanningDoctor);
+      expect(grantResult.success).toBe(true);
+      expect(grantResult.patient.name).toBe('Arthur Dent');
+
+      // Step 4: Doctor opens patient -> Existing uploaded reports appear
+      const patientData = await getAuthorizedPatientData(accessSession.sessionId);
+      expect(patientData.patient.id).toBe('pat_registered_arthur_dent');
+      expect(patientData.records.length).toBe(2);
+
+      // Step 5: Verify exact existing reports & PDF metadata are present
+      const [report1, report2] = patientData.records;
+      expect(report1.title).toBe('Comprehensive Metabolic Panel Report');
+      expect(report1.fileName).toBe('Arthur_Metabolic_Panel_Sept2026.pdf');
+      expect(report1.fileType).toBe('pdf');
+      expect(report1.fileUrl).toBe('https://storage.vitaldiary.io/medical-files/Arthur_Metabolic_Panel_Sept2026.pdf');
+      expect(report1.extractedMetrics.length).toBe(2);
+
+      expect(report2.title).toBe('12-Lead Resting ECG Report');
+      expect(report2.fileName).toBe('Arthur_ECG_Sept2026.pdf');
+      expect(report2.fileUrl).toBe('https://storage.vitaldiary.io/medical-files/Arthur_ECG_Sept2026.pdf');
+
+      // Step 6: Session expiration blocks doctor from fetching records
+      await endDoctorAccessSession(accessSession.sessionId);
+      await expect(getAuthorizedPatientData(accessSession.sessionId)).rejects.toThrow();
+    });
   });
 });

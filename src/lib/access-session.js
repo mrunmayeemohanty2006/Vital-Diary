@@ -921,30 +921,37 @@ export async function getAuthorizedPatientData(sessionId) {
           // Format records and get signed URLs if needed
           const formattedRecords = await Promise.all(
             (data.records || []).map(async (r) => {
-              let fileUrl = r.file_url || '';
-              if (r.file_path && !fileUrl.startsWith('data:')) {
-                const signed = await getSignedFileUrl(r.file_path, 3600);
-                if (signed) fileUrl = signed;
+              let fileUrl = r.file_url || r.fileUrl || '';
+              const filePath = r.file_path || r.filePath || '';
+              if (filePath && !fileUrl.startsWith('data:')) {
+                try {
+                  const signed = await getSignedFileUrl(filePath, 3600);
+                  if (signed) fileUrl = signed;
+                } catch {
+                  // Fallback to original url
+                }
               }
               return {
                 id: r.id,
+                userId: r.user_id || r.userId,
                 title: r.title,
                 category: r.category,
                 provider: r.provider || '',
                 doctor: r.doctor || '',
                 date: r.date || '',
-                uploadedAt: r.created_at,
-                fileName: r.file_name || 'medical_report',
-                fileSize: r.file_size || 'Document',
-                fileType: r.file_type || 'document',
+                uploadedAt: r.created_at || r.uploadedAt,
+                fileName: r.file_name || r.fileName || 'medical_report.pdf',
+                fileSize: r.file_size || r.fileSize || 'Document',
+                fileType: r.file_type || r.fileType || 'pdf',
+                filePath,
                 fileUrl,
                 tags: r.tags || [],
                 notes: r.notes || '',
                 status: r.status || 'Verified',
-                extractedMetrics: r.extracted_metrics || [],
+                extractedMetrics: r.extracted_metrics || r.extractedMetrics || [],
                 results: r.results || {},
-                isMedicalReport: r.is_medical_report ?? true,
-                validationMessage: r.validation_message || '',
+                isMedicalReport: r.is_medical_report !== undefined ? r.is_medical_report : (r.isMedicalReport ?? true),
+                validationMessage: r.validation_message || r.validationMessage || '',
               };
             })
           );
@@ -971,22 +978,29 @@ export async function getAuthorizedPatientData(sessionId) {
           if (dbReports && dbReports.length > 0) {
             const formattedRecords = await Promise.all(
               dbReports.map(async (r) => {
-                let fileUrl = r.file_url || '';
-                if (r.file_path && !fileUrl.startsWith('data:')) {
-                  const signed = await getSignedFileUrl(r.file_path, 3600);
-                  if (signed) fileUrl = signed;
+                let fileUrl = r.file_url || r.fileUrl || '';
+                const filePath = r.file_path || r.filePath || '';
+                if (filePath && !fileUrl.startsWith('data:')) {
+                  try {
+                    const signed = await getSignedFileUrl(filePath, 3600);
+                    if (signed) fileUrl = signed;
+                  } catch {
+                    // Fallback to original url
+                  }
                 }
                 return {
                   id: r.id,
+                  userId: r.user_id,
                   title: r.title,
                   category: r.category,
                   provider: r.provider || '',
                   doctor: r.doctor || '',
                   date: r.date || '',
                   uploadedAt: r.created_at,
-                  fileName: r.file_name || 'medical_report',
+                  fileName: r.file_name || 'medical_report.pdf',
                   fileSize: r.file_size || 'Document',
                   fileType: r.file_type || 'pdf',
+                  filePath,
                   fileUrl,
                   tags: r.tags || [],
                   notes: r.notes || '',
@@ -1000,9 +1014,9 @@ export async function getAuthorizedPatientData(sessionId) {
             );
 
             return {
-              patient: localSess.patient,
+              patient: localSess?.patient || { id: targetUserId },
               records: formattedRecords,
-              expiresAt: localSess.expiresAt || new Date(Date.now() + 30 * 60000).toISOString(),
+              expiresAt: localSess?.expiresAt || new Date(Date.now() + 30 * 60000).toISOString(),
             };
           }
         }
