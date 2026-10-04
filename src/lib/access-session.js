@@ -714,6 +714,8 @@ export async function grantDoctorDirectQRAccess(target, doctorUser = null) {
 
   if (!cleanSessionId) throw new Error('Invalid or empty Session ID.');
 
+  const isUUID = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(str || ''));
+
   const doctorProfile = {
     id: doctorUser?.id || 'DOC-4892',
     name: doctorUser?.name || 'Dr. Sarah Jenkins, MD',
@@ -730,10 +732,12 @@ export async function grantDoctorDirectQRAccess(target, doctorUser = null) {
     try {
       const client = getSupabase();
       if (client) {
-        // Try RPC grant_doctor_direct_access
+        // Try RPC grant_doctor_direct_access with doctor identity
         try {
           const { data: rpcData, error: rpcErr } = await client.rpc('grant_doctor_direct_access', {
             p_session_id: cleanSessionId,
+            p_doctor_id: isUUID(doctorProfile.id) ? doctorProfile.id : null,
+            p_doctor_name: doctorProfile.name,
           });
           if (!rpcErr && rpcData?.success) {
             session = {
@@ -742,7 +746,11 @@ export async function grantDoctorDirectQRAccess(target, doctorUser = null) {
               expiresAt: rpcData.expiresAt,
               status: 'active',
               patient: rpcData.patient,
-              doctor: doctorProfile,
+              doctor: {
+                ...doctorProfile,
+                ...(rpcData.doctor || {}),
+                name: rpcData.doctor?.name || doctorProfile.name,
+              },
             };
           }
         } catch {
@@ -759,14 +767,19 @@ export async function grantDoctorDirectQRAccess(target, doctorUser = null) {
           if (dbData) {
             const duration = dbData.duration_minutes || meta.expiresInMin || 30;
             const expiresAt = new Date(Date.now() + duration * 60 * 1000).toISOString();
+            const updatePayload = {
+              status: 'active',
+              doctor_name: doctorProfile.name,
+              expires_at: expiresAt,
+              accessed_at: new Date().toISOString(),
+            };
+            if (isUUID(doctorProfile.id)) {
+              updatePayload.doctor_id = doctorProfile.id;
+            }
+
             await client
               .from('patient_access_sessions')
-              .update({
-                status: 'active',
-                doctor_id: doctorProfile.id,
-                doctor_name: doctorProfile.name,
-                expires_at: expiresAt,
-              })
+              .update(updatePayload)
               .eq('session_id', cleanSessionId);
 
             session = {
@@ -1330,7 +1343,7 @@ export async function revokePatientAccessSession(sessionId, patientId) {
 }
 
 /**
- * Check if patient has an ongoing unexpired active or pending session
+ * Synchronous local cache reader for patient active session
  */
 export function getPatientActiveSession(patientId) {
   if (!patientId) return null;
@@ -1347,6 +1360,122 @@ export function getPatientActiveSession(patientId) {
     return session;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Asynchronously fetch latest active or pending session for patient from Supabase.
+ * Updates local cache and returns the resolved session.
+ */
+export async function fetchPatientActiveSession(patientId) {
+  if (!patientId) return null;
+
+  // 1. Check Supabase database if configured
+  if (isSupabaseConfigured() && !patientId.startsWith('usr_')) {
+    try {
+      const client = getSupabase();
+      if (client) {
+        const { data: dbSession, error } = await client
+          .from('patient_access_sessions')
+          .select('*')
+          .eq('patient_id', patientId)
+          .in('status', ['pending', 'waiting_scan', 'active'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!error && dbSession) {
+          // Check expiration
+          if (
+            dbSession.status === 'active' &&
+            dbSession.expires_at &&
+            new Date(dbSession.expires_at).getTime() < Date.now()
+          ) {
+            removeStoredItem(`vital_diary_patient_active_session_${patientId}`);
+            return null;
+          }
+
+          const localRaw = getStoredItem(`vital_diary_patient_active_session_${patientId}`);
+          const localObj = localRaw ? JSON.parse(localRaw) : {};
+
+          const doctorName = dbSession.doctor_name || localObj.doctorName || localObj.doctor?.name || 'Dr. Healthcare Provider';
+          const doctorId = dbSession.doctor_id || localObj.doctorId || localObj.doctor?.id || 'DOC-AUTH';
+
+          const merged = {
+            ...localObj,
+            sessionId: dbSession.session_id,
+            status: dbSession.status,
+            durationMinutes: dbSession.duration_minutes || localObj.durationMinutes || 30,
+            expiresAt: dbSession.expires_at || localObj.expiresAt,
+            accessedAt: dbSession.accessed_at || localObj.accessedAt,
+            createdAt: dbSession.created_at || localObj.createdAt,
+            doctorId,
+            doctorName,
+            doctor: {
+              id: doctorId,
+              name: doctorName,
+              specialty: localObj.doctor?.specialty || 'Healthcare Specialist',
+              hospital: localObj.doctor?.hospital,
+              email: localObj.doctor?.email,
+            },
+          };
+
+          setStoredItem(`vital_diary_patient_active_session_${patientId}`, JSON.stringify(merged));
+          return merged;
+        } else if (!error && !dbSession) {
+          // No active session on DB
+          const local = getPatientActiveSession(patientId);
+          if (local && local.status === 'active') {
+            removeStoredItem(`vital_diary_patient_active_session_${patientId}`);
+            return null;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Notice querying active session from DB:', err.message);
+    }
+  }
+
+  // 2. Fallback to local session
+  return getPatientActiveSession(patientId);
+}
+
+/**
+ * Real-time Supabase subscription for patient access session changes
+ */
+export function subscribeToPatientAccessSession(patientId, onChange) {
+  if (!patientId || !isSupabaseConfigured() || patientId.startsWith('usr_')) {
+    return { unsubscribe: () => {} };
+  }
+
+  try {
+    const client = getSupabase();
+    if (!client) return { unsubscribe: () => {} };
+
+    const channel = client
+      .channel(`patient_access_${patientId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'patient_access_sessions',
+          filter: `patient_id=eq.${patientId}`,
+        },
+        async () => {
+          const updated = await fetchPatientActiveSession(patientId);
+          onChange(updated);
+        }
+      )
+      .subscribe();
+
+    return {
+      unsubscribe: () => {
+        client.removeChannel(channel);
+      },
+    };
+  } catch {
+    return { unsubscribe: () => {} };
   }
 }
 

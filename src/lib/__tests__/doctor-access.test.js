@@ -11,6 +11,8 @@ import {
   initiateDoctorScanAccess,
   revokePatientAccessSession,
   getPatientActiveSession,
+  fetchPatientActiveSession,
+  subscribeToPatientAccessSession,
   getDoctorPatients,
   clearLocalAccessStore,
 } from '../access-session';
@@ -299,6 +301,57 @@ describe('Vital Diary — Zero-OTP Direct QR Access Flow', () => {
       // Step 6: Session expiration blocks doctor from fetching records
       await endDoctorAccessSession(accessSession.sessionId);
       await expect(getAuthorizedPatientData(accessSession.sessionId)).rejects.toThrow();
+    });
+
+    it('should notify patient portal and update active session with real doctor details when QR is scanned', async () => {
+      const patient = {
+        id: 'pat_realtime_sync_user',
+        name: 'Johnathan Archer',
+        email: 'archer@starfleet.org',
+        bloodGroup: 'O-',
+      };
+      const reports = [
+        { id: 'rep_ja_01', title: 'Pre-flight Medical Clearance', category: 'Lab Results', date: '2026-10-01' },
+      ];
+
+      // Patient generates QR
+      const session = await createPatientAccessSession({
+        patient,
+        records: reports,
+        durationMinutes: 30,
+      });
+
+      // Before scan: Patient portal reads session as waiting_scan
+      let patientSession = await fetchPatientActiveSession(patient.id);
+      expect(patientSession).toBeDefined();
+      expect(patientSession.status).toBe('waiting_scan');
+      expect(patientSession.doctor).toBeNull();
+
+      // Doctor scans QR with real doctor identity
+      const realDoctor = {
+        id: '12345678-1234-1234-1234-123456789abc',
+        name: 'Dr. Leonard McCoy, MD',
+        email: 'bones@starfleet.org',
+        specialty: 'Chief Medical Officer',
+        hospital: 'Starfleet General Hospital',
+      };
+
+      const grantResult = await grantDoctorDirectQRAccess(session.sessionId, realDoctor);
+      expect(grantResult.success).toBe(true);
+      expect(grantResult.doctor.name).toBe('Dr. Leonard McCoy, MD');
+
+      // Patient portal immediately detects the update
+      patientSession = await fetchPatientActiveSession(patient.id);
+      expect(patientSession).toBeDefined();
+      expect(patientSession.status).toBe('active');
+      expect(patientSession.doctor.name).toBe('Dr. Leonard McCoy, MD');
+      expect(patientSession.expiresAt).toBeDefined();
+
+      // Doctor accesses records
+      const authorizedData = await getAuthorizedPatientData(session.sessionId);
+      expect(authorizedData.patient.name).toBe('Johnathan Archer');
+      expect(authorizedData.records.length).toBe(1);
+      expect(authorizedData.records[0].title).toBe('Pre-flight Medical Clearance');
     });
   });
 });

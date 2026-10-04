@@ -25,6 +25,8 @@ import {
   grantDoctorDirectQRAccess,
   revokePatientAccessSession,
   getPatientActiveSession,
+  fetchPatientActiveSession,
+  subscribeToPatientAccessSession,
   generatePatientAccessQRDataUrl,
 } from '../lib/access-session';
 
@@ -42,28 +44,43 @@ export default function GenerateQRPage({ onNavigateTab }) {
   const [totalDurationSeconds, setTotalDurationSeconds] = useState(1800);
   const [qrImageSrc, setQrImageSrc] = useState(activeSession?.qrDataUrl || '');
 
-  // Synchronize state with local storage & real-time events
+  // Synchronize state with Supabase database & local storage in real time
   const syncSession = useCallback(async () => {
     if (!user?.id) return;
-    const current = getPatientActiveSession(user.id);
-    setActiveSession(current);
-
-    if (current && !current.qrDataUrl) {
-      try {
-        const url = await generatePatientAccessQRDataUrl(current);
-        setQrImageSrc(url);
-      } catch (e) {
-        console.warn('QR gen error:', e);
+    const current = await fetchPatientActiveSession(user.id);
+    if (current) {
+      setActiveSession(current);
+      if (!current.qrDataUrl) {
+        try {
+          const url = await generatePatientAccessQRDataUrl(current);
+          setQrImageSrc(url);
+        } catch (e) {
+          console.warn('QR gen error:', e);
+        }
+      } else {
+        setQrImageSrc(current.qrDataUrl);
       }
-    } else if (current?.qrDataUrl) {
-      setQrImageSrc(current.qrDataUrl);
+    } else {
+      setActiveSession(null);
+      setQrImageSrc('');
     }
   }, [user?.id]);
 
   useEffect(() => {
     syncSession();
 
-    // Listen for custom events dispatched when doctor scans QR
+    // 1. Supabase Real-time database subscription
+    const dbSub = subscribeToPatientAccessSession(user?.id, (updated) => {
+      if (updated) {
+        setActiveSession(updated);
+        if (updated.qrDataUrl) setQrImageSrc(updated.qrDataUrl);
+      } else {
+        setActiveSession(null);
+        setQrImageSrc('');
+      }
+    });
+
+    // 2. Custom window events dispatched when doctor scans QR
     const handleSessionEvent = (e) => {
       if (e?.detail?.session) {
         if (!user || e.detail.session.patient?.id === user.id || e.detail.session.sessionId === activeSession?.sessionId) {
@@ -72,7 +89,7 @@ export default function GenerateQRPage({ onNavigateTab }) {
       }
     };
 
-    // Storage event for multi-tab synchronization
+    // 3. Storage event for multi-tab synchronization
     const handleStorage = (e) => {
       if (e.key?.startsWith('vital_diary_patient_active_session_') || e.key === 'vital_diary_patient_access_sessions') {
         syncSession();
@@ -82,9 +99,11 @@ export default function GenerateQRPage({ onNavigateTab }) {
     window.addEventListener('vital_diary_session_event', handleSessionEvent);
     window.addEventListener('storage', handleStorage);
 
-    const pollTimer = setInterval(syncSession, 800);
+    // 4. Polling timer for robust cross-device syncing
+    const pollTimer = setInterval(syncSession, 1500);
 
     return () => {
+      dbSub.unsubscribe();
       window.removeEventListener('vital_diary_session_event', handleSessionEvent);
       window.removeEventListener('storage', handleStorage);
       clearInterval(pollTimer);
@@ -554,7 +573,7 @@ export default function GenerateQRPage({ onNavigateTab }) {
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0 }}>
-                    Active Doctor Access
+                    QR Scanned — Access Active
                   </h2>
                   <span
                     style={{

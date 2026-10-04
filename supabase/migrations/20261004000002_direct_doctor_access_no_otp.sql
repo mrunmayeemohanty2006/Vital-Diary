@@ -63,9 +63,11 @@ create policy "Allow reading medical files by owner or active session"
   );
 
 -- 5. SECURITY DEFINER RPC: grant_doctor_direct_access
--- Directly activates access session for scanning doctor without OTP
+-- Directly activates access session for scanning doctor without OTP, saving doctor's identity and start/expiry times
 create or replace function public.grant_doctor_direct_access(
-  p_session_id text
+  p_session_id text,
+  p_doctor_id text default null,
+  p_doctor_name text default null
 )
 returns jsonb
 language plpgsql
@@ -79,11 +81,21 @@ declare
   v_doctor_name text;
   v_expires_at timestamp with time zone;
 begin
+  -- Resolve doctor UUID if valid
   v_doctor_id := auth.uid();
+  if v_doctor_id is null and p_doctor_id is not null then
+    begin
+      v_doctor_id := p_doctor_id::uuid;
+    exception when others then
+      v_doctor_id := null;
+    end;
+  end if;
   
   if v_doctor_id is not null then
     select name into v_doctor_name from public.profiles where id = v_doctor_id;
   end if;
+
+  v_doctor_name := coalesce(v_doctor_name, nullif(trim(p_doctor_name), ''), 'Dr. Healthcare Provider');
 
   -- Find the session
   select * into v_session
@@ -112,7 +124,7 @@ begin
   update public.patient_access_sessions
   set
     doctor_id = coalesce(v_doctor_id, doctor_id),
-    doctor_name = coalesce(v_doctor_name, doctor_name, 'Dr. Healthcare Provider'),
+    doctor_name = v_doctor_name,
     status = 'active',
     expires_at = v_expires_at,
     accessed_at = now()
@@ -129,6 +141,10 @@ begin
     'sessionId', v_session.session_id,
     'expiresAt', v_session.expires_at,
     'durationMinutes', v_session.duration_minutes,
+    'doctor', jsonb_build_object(
+      'id', coalesce(v_doctor_id::text, v_session.doctor_id::text, p_doctor_id, 'DOC-AUTH'),
+      'name', v_doctor_name
+    ),
     'patient', jsonb_build_object(
       'id', coalesce(v_patient.id, v_session.patient_id),
       'name', coalesce(v_patient.name, 'Authorized Patient'),
