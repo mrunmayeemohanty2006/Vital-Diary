@@ -26,7 +26,6 @@ export default function Navbar({ activePage, setActivePage }) {
           <div className="brand-text">
             <span>Vital</span>
             <span className="highlight">Diary</span>
-            <span className="brand-badge">Health</span>
           </div>
         </div>
 
@@ -92,34 +91,7 @@ export default function Navbar({ activePage, setActivePage }) {
                 Profile
               </span>
             </>
-          ) : (
-            <>
-              <span
-                className={`nav-link ${activePage === 'dashboard' ? 'active' : ''}`}
-                onClick={() => handleNavClick('dashboard')}
-              >
-                Dashboard
-              </span>
-              <span
-                className={`nav-link ${activePage === 'upload' ? 'active' : ''}`}
-                onClick={() => handleNavClick('upload')}
-              >
-                Upload Record
-              </span>
-              <span
-                className={`nav-link ${activePage === 'insights' ? 'active' : ''}`}
-                onClick={() => handleNavClick('insights')}
-              >
-                Insights
-              </span>
-              <span
-                className={`nav-link ${activePage === 'search' ? 'active' : ''}`}
-                onClick={() => handleNavClick('search')}
-              >
-                Search Records
-              </span>
-            </>
-          )}
+          ) : null}
         </nav>
 
         {/* Right Actions */}
@@ -278,7 +250,7 @@ export default function Navbar({ activePage, setActivePage }) {
                 onClick={() => handleNavClick('insights')}
               >
                 <TrendingUp size={18} />
-                <span>Health Insights</span>
+                <span>Get Insight</span>
               </button>
               <button
                 type="button"

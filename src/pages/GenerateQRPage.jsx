@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useRecords } from '../context/RecordsContext';
+import { useNotification } from '../context/NotificationContext';
 import {
   createPatientAccessSession,
   grantDoctorDirectQRAccess,
@@ -33,6 +34,7 @@ import {
 export default function GenerateQRPage({ onNavigateTab }) {
   const { user } = useAuth();
   const { records } = useRecords();
+  const notify = useNotification();
 
   const [activeSession, setActiveSession] = useState(() => getPatientActiveSession(user?.id));
   const [durationOption, setDurationOption] = useState('30'); // '15', '30', '60', 'custom'
@@ -183,8 +185,9 @@ export default function GenerateQRPage({ onNavigateTab }) {
 
       setActiveSession(session);
       setQrImageSrc(session.qrDataUrl);
+      notify.success('Temporary doctor access QR generated successfully.');
     } catch (err) {
-      alert(`Failed to generate QR: ${err.message}`);
+      notify.error(`Failed to generate QR: ${err.message}`);
     } finally {
       setIsGenerating(false);
     }
@@ -209,8 +212,9 @@ export default function GenerateQRPage({ onNavigateTab }) {
         status: 'active',
         doctor: result.doctor,
       }));
+      notify.success('Doctor connected and granted clinical records access.');
     } catch (err) {
-      alert(`Scan access error: ${err.message}`);
+      notify.error(`Scan access error: ${err.message}`);
     } finally {
       setIsSimulatingScan(false);
     }
@@ -219,14 +223,25 @@ export default function GenerateQRPage({ onNavigateTab }) {
   // Revoke / End Access
   const handleRevoke = async () => {
     if (!activeSession) return;
+    const confirmed = await notify.confirm({
+      title: 'Revoke Doctor Access',
+      message: 'Are you sure you want to revoke doctor access immediately? All temporary access will terminate.',
+      confirmText: 'Revoke Access',
+      cancelText: 'Keep Active',
+      type: 'danger',
+    });
+    if (!confirmed) return;
+
     try {
       await revokePatientAccessSession(activeSession.sessionId, user?.id);
       setActiveSession(null);
       setQrImageSrc('');
+      notify.info('Doctor access has been revoked.');
     } catch (err) {
       console.warn('Revoke notice:', err);
       setActiveSession(null);
       setQrImageSrc('');
+      notify.info('Doctor access session terminated.');
     }
   };
 
@@ -863,44 +878,18 @@ export default function GenerateQRPage({ onNavigateTab }) {
                   <RefreshCw className="animate-spin" size={32} />
                 </div>
               )}
-
-              <div style={{ marginTop: '0.75rem', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                Session ID: <strong style={{ color: 'var(--color-text-primary)' }}>#{activeSession.sessionId?.substring(0, 10)}...</strong>
-              </div>
             </div>
 
-            {/* Actions & Instant Test Button */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.5rem' }}>
               <button
                 type="button"
-                onClick={handleSimulateDoctorScan}
-                disabled={isSimulatingScan}
-                className="btn btn-primary btn-sm"
-                style={{ gap: '0.4rem', padding: '0.6rem 1.25rem' }}
+                onClick={handleRevoke}
+                className="btn btn-outline btn-sm"
+                style={{ color: '#dc2626', borderColor: '#fca5a5', padding: '0.5rem 1.25rem' }}
               >
-                {isSimulatingScan ? <RefreshCw className="animate-spin" size={16} /> : <ScanLine size={16} />}
-                <span>Simulate Doctor Scan (Direct Access)</span>
+                Cancel / Reset
               </button>
-
-              <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={copySessionId}
-                  className="btn btn-outline btn-sm"
-                  style={{ gap: '0.4rem' }}
-                >
-                  {copiedSessionId ? <Check size={15} /> : <Copy size={15} />}
-                  <span>{copiedSessionId ? 'Copied ID' : 'Copy Session ID'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRevoke}
-                  className="btn btn-outline btn-sm"
-                  style={{ color: '#dc2626', borderColor: '#fca5a5' }}
-                >
-                  Cancel / Reset
-                </button>
-              </div>
             </div>
           </div>
         </div>

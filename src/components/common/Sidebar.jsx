@@ -31,7 +31,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
     },
     {
       id: 'insights',
-      label: 'Get Inside',
+      label: 'Get Insight',
       icon: TrendingUp,
       badge: null,
     },

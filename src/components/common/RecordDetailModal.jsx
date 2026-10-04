@@ -15,10 +15,12 @@ import {
   Eye,
 } from 'lucide-react';
 import { useRecords } from '../../context/RecordsContext';
+import { useNotification } from '../../context/NotificationContext';
 import { getSignedFileUrl } from '../../lib/supabase';
 
 export default function RecordDetailModal({ record, onClose, isReadOnly = false }) {
   const { deleteRecord } = useRecords();
+  const notify = useNotification();
   const [resolvedUrl, setResolvedUrl] = useState(record?.fileUrl || '');
 
   useEffect(() => {
@@ -39,9 +41,18 @@ export default function RecordDetailModal({ record, onClose, isReadOnly = false 
 
   if (!record) return null;
 
-  const handleDelete = () => {
-    if (window.confirm(`Are you sure you want to remove "${record.title}" from your diary?`)) {
+  const handleDelete = async () => {
+    const confirmed = await notify.confirm({
+      title: 'Remove Medical Record',
+      message: `Are you sure you want to remove "${record.title}" from your diary?`,
+      confirmText: 'Remove Record',
+      cancelText: 'Cancel',
+      type: 'danger',
+    });
+
+    if (confirmed) {
       deleteRecord(record.id);
+      notify.info(`"${record.title}" removed from your diary.`);
       onClose();
     }
   };

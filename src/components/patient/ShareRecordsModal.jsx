@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useRecords } from '../../context/RecordsContext';
+import { useNotification } from '../../context/NotificationContext';
 import {
   createPatientAccessSession,
   revokePatientAccessSession,
@@ -25,6 +26,7 @@ import {
 export default function ShareRecordsModal({ onClose }) {
   const { user } = useAuth();
   const { records } = useRecords();
+  const notify = useNotification();
 
   const [activeSession, setActiveSession] = useState(() => getPatientActiveSession(user?.id));
   const [durationOption, setDurationOption] = useState('30'); // '15', '30', '60', 'custom'
@@ -99,8 +101,9 @@ export default function ShareRecordsModal({ onClose }) {
       setActiveSession(session);
       const diff = Math.floor((new Date(session.expiresAt).getTime() - Date.now()) / 1000);
       setSecondsRemaining(Math.max(0, diff));
+      notify.success('Temporary doctor access QR generated successfully.');
     } catch (err) {
-      alert(`Failed to generate access QR: ${err.message}`);
+      notify.error(`Failed to generate access QR: ${err.message}`);
     } finally {
       setIsGenerating(false);
     }
@@ -108,10 +111,19 @@ export default function ShareRecordsModal({ onClose }) {
 
   const handleRevoke = async () => {
     if (!activeSession) return;
-    if (window.confirm('Are you sure you want to revoke doctor access immediately? All temporary access will terminate.')) {
+    const confirmed = await notify.confirm({
+      title: 'Revoke Doctor Access',
+      message: 'Are you sure you want to revoke doctor access immediately? All temporary access will terminate.',
+      confirmText: 'Revoke Access',
+      cancelText: 'Keep Active',
+      type: 'danger',
+    });
+
+    if (confirmed) {
       await revokePatientAccessSession(activeSession.sessionId, user?.id);
       setActiveSession(null);
       setSecondsRemaining(0);
+      notify.info('Doctor access has been revoked.');
     }
   };
 

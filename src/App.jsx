@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import './App.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { RecordsProvider } from './context/RecordsContext';
+import { NotificationProvider } from './context/NotificationContext';
 import Navbar from './components/common/Navbar';
 import Sidebar from './components/common/Sidebar';
 import HomePage from './pages/HomePage';
@@ -133,10 +134,12 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <RecordsProvider>
-        <AppContent />
-      </RecordsProvider>
-    </AuthProvider>
+    <NotificationProvider>
+      <AuthProvider>
+        <RecordsProvider>
+          <AppContent />
+        </RecordsProvider>
+      </AuthProvider>
+    </NotificationProvider>
   );
 }

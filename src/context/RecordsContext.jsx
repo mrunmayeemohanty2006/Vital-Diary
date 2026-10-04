@@ -14,6 +14,7 @@ import {
 import { performLocalOCR, isSupportedImageFile, isPDFFile, renderPdfFirstPageThumbnail } from '../lib/ocr';
 import { validateMedicalDocument } from '../lib/medical-document-validator';
 import { extractHealthData } from '../lib/health-extractor';
+import { filterMedicalRecords } from '../lib/record-search';
 
 const RecordsContext = createContext();
 
@@ -544,61 +545,7 @@ export function RecordsProvider({ children }) {
   };
 
   const searchRecords = (query, filters = {}) => {
-    const q = (query || '').toLowerCase().trim();
-    const { category, provider, dateFrom, dateTo, tag, folder } = filters;
-
-    return records.filter((rec) => {
-      if (category && category !== 'All' && rec.category !== category) {
-        return false;
-      }
-
-      if (provider && provider !== 'All' && rec.provider !== provider) {
-        return false;
-      }
-
-      if (folder && folder !== 'All' && rec.folderName !== folder) {
-        return false;
-      }
-
-      if (tag && !rec.tags?.some((t) => t.toLowerCase() === tag.toLowerCase())) {
-        return false;
-      }
-
-      if (dateFrom && rec.date < dateFrom) {
-        return false;
-      }
-      if (dateTo && rec.date > dateTo) {
-        return false;
-      }
-
-      if (q) {
-        const titleMatch = (rec.title || '').toLowerCase().includes(q);
-        const notesMatch = (rec.notes || '').toLowerCase().includes(q);
-        const doctorMatch = (rec.doctor || '').toLowerCase().includes(q);
-        const providerMatch = (rec.provider || '').toLowerCase().includes(q);
-        const categoryMatch = (rec.category || '').toLowerCase().includes(q);
-        const folderMatch = (rec.folderName || '').toLowerCase().includes(q);
-        const tagMatch = (rec.tags || []).some((t) => t.toLowerCase().includes(q));
-        const fileMatch = (rec.fileName || '').toLowerCase().includes(q);
-        const metricMatch = (rec.extractedMetrics || []).some((m) =>
-          (m.name || '').toLowerCase().includes(q) || (m.displayValue || '').toLowerCase().includes(q)
-        );
-
-        return (
-          titleMatch ||
-          notesMatch ||
-          doctorMatch ||
-          providerMatch ||
-          categoryMatch ||
-          folderMatch ||
-          tagMatch ||
-          fileMatch ||
-          metricMatch
-        );
-      }
-
-      return true;
-    });
+    return filterMedicalRecords(records, query, filters);
   };
 
   const computeStorageUsed = () => {

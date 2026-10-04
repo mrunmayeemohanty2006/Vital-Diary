@@ -22,6 +22,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
 import QRScannerModal from '../components/doctor/QRScannerModal';
 import PatientViewHeader from '../components/doctor/PatientViewHeader';
 import PatientRecordSearch from '../components/doctor/PatientRecordSearch';
@@ -29,6 +30,7 @@ import DoctorRecordCard from '../components/doctor/DoctorRecordCard';
 import SessionExpiredModal from '../components/doctor/SessionExpiredModal';
 import RecordDetailModal from '../components/common/RecordDetailModal';
 import MetricCard from '../components/common/MetricCard';
+import { filterMedicalRecords } from '../lib/record-search';
 import {
   getAuthorizedPatientData,
   endDoctorAccessSession,
@@ -40,6 +42,7 @@ import {
 
 export default function DoctorPortal({ onSwitchToPatientView, initialTab = 'dashboard' }) {
   const { user } = useAuth();
+  const notify = useNotification();
 
   // Navigation tab state: 'dashboard' | 'patients' | 'activity' | 'profile'
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -127,8 +130,9 @@ export default function DoctorPortal({ onSwitchToPatientView, initialTab = 'dash
       setPatientSearchQuery('');
       setSelectedCategory('All');
       refreshData();
+      notify.success(`Connected to ${sessionObj.patient?.name || 'patient'} records.`);
     } catch (err) {
-      alert(`QR Access Error: ${err.message}`);
+      notify.error(`QR Access Error: ${err.message}`);
     } finally {
       setLoadingRecords(false);
     }
@@ -160,7 +164,15 @@ export default function DoctorPortal({ onSwitchToPatientView, initialTab = 'dash
   // Handle manual session termination
   const handleEndSession = async () => {
     if (!activeSession) return;
-    if (window.confirm('Are you sure you want to end this clinical access session and lock the patient vault?')) {
+    const confirmed = await notify.confirm({
+      title: 'End Clinical Session',
+      message: 'Are you sure you want to end this clinical access session and lock the patient vault?',
+      confirmText: 'End Session',
+      cancelText: 'Continue Viewing',
+      type: 'warning',
+    });
+
+    if (confirmed) {
       try {
         await endDoctorAccessSession(activeSession.sessionId);
       } catch (e) {
@@ -171,6 +183,7 @@ export default function DoctorPortal({ onSwitchToPatientView, initialTab = 'dash
       setPatientRecords([]);
       setSelectedRecord(null);
       refreshData();
+      notify.info('Clinical session closed.');
     }
   };
 
@@ -227,44 +240,11 @@ export default function DoctorPortal({ onSwitchToPatientView, initialTab = 'dash
     setLoadingRecords(false);
   };
 
-  // Filter patient records in Patient Record view
+  // Filter patient records in Patient Record view using deterministic engine
   const filteredRecords = useMemo(() => {
     if (!patientRecords || patientRecords.length === 0) return [];
-    const q = patientSearchQuery.toLowerCase().trim();
-
-    return patientRecords.filter((rec) => {
-      if (selectedCategory !== 'All' && rec.category !== selectedCategory) {
-        return false;
-      }
-      if (!q) return true;
-
-      const titleMatch = (rec.title || '').toLowerCase().includes(q);
-      const categoryMatch = (rec.category || '').toLowerCase().includes(q);
-      const doctorMatch = (rec.doctor || '').toLowerCase().includes(q);
-      const providerMatch = (rec.provider || '').toLowerCase().includes(q);
-      const dateMatch = (rec.date || '').toLowerCase().includes(q);
-      const notesMatch = (rec.notes || '').toLowerCase().includes(q);
-      const tagsMatch = (rec.tags || []).some((t) => t.toLowerCase().includes(q));
-      const fileMatch = (rec.fileName || '').toLowerCase().includes(q);
-
-      const metricMatch = (rec.extractedMetrics || []).some((m) => {
-        const nameMatch = (m.name || '').toLowerCase().includes(q);
-        const valMatch = String(m.value || '').toLowerCase().includes(q);
-        const unitMatch = (m.unit || '').toLowerCase().includes(q);
-        return nameMatch || valMatch || unitMatch;
-      });
-
-      return (
-        titleMatch ||
-        categoryMatch ||
-        doctorMatch ||
-        providerMatch ||
-        dateMatch ||
-        notesMatch ||
-        tagsMatch ||
-        fileMatch ||
-        metricMatch
-      );
+    return filterMedicalRecords(patientRecords, patientSearchQuery, {
+      category: selectedCategory,
     });
   }, [patientRecords, patientSearchQuery, selectedCategory]);
 
@@ -545,6 +525,7 @@ export default function DoctorPortal({ onSwitchToPatientView, initialTab = 'dash
                         key={rec.id}
                         record={rec}
                         onSelectRecord={setSelectedRecord}
+                        searchQuery={patientSearchQuery}
                       />
                     ))}
                   </div>

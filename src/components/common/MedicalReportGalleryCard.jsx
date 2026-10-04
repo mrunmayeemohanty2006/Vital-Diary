@@ -10,10 +10,12 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { useRecords } from '../../context/RecordsContext';
+import { useNotification } from '../../context/NotificationContext';
 import { renderPdfFirstPageThumbnail } from '../../lib/ocr';
 
 export default function MedicalReportGalleryCard({ record, onSelectRecord }) {
   const { deleteRecord } = useRecords();
+  const notify = useNotification();
 
   const isImage =
     record?.fileType === 'image' ||
@@ -104,10 +106,19 @@ export default function MedicalReportGalleryCard({ record, onSelectRecord }) {
     }
   };
 
-  const handleDelete = (e) => {
+  const handleDelete = async (e) => {
     e.stopPropagation();
-    if (window.confirm(`Are you sure you want to permanently delete "${record.title}" from your diary?`)) {
+    const confirmed = await notify.confirm({
+      title: 'Delete Medical Record',
+      message: `Are you sure you want to permanently delete "${record.title}" from your diary?`,
+      confirmText: 'Delete Record',
+      cancelText: 'Cancel',
+      type: 'danger',
+    });
+
+    if (confirmed) {
       deleteRecord(record.id);
+      notify.info(`"${record.title}" removed from your diary.`);
     }
   };
 

@@ -14,12 +14,14 @@ import {
   Activity,
 } from 'lucide-react';
 import { useRecords } from '../context/RecordsContext';
+import { useNotification } from '../context/NotificationContext';
 import { isSupabaseConfigured } from '../services/supabase';
 import RecordDetailModal from '../components/common/RecordDetailModal';
 import MedicalReportsGallery from '../components/common/MedicalReportsGallery';
 
 export default function UploadPage({ onUploadComplete }) {
   const { addBatchRecords, records } = useRecords();
+  const notify = useNotification();
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
 
@@ -100,10 +102,11 @@ export default function UploadPage({ onUploadComplete }) {
       });
       setStagedFiles([]);
       setDetectedFolderName('');
+      notify.success(`Successfully uploaded and processed ${savedRecords.length} medical report${savedRecords.length === 1 ? '' : 's'}.`);
     } catch (err) {
       setLoading(false);
       setProcessingStatus('');
-      alert('Failed to upload files: ' + err.message);
+      notify.error('Failed to upload files: ' + err.message);
     }
   };
 
