@@ -46,13 +46,26 @@
 .logo-icon-wrap {
   width: 40px;
   height: 40px;
-  background-color: var(--color-mint-50);
-  border: 1px solid var(--color-mint-200);
-  border-radius: var(--radius-md);
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-primary);
+  background: transparent;
+  border: none;
+  overflow: hidden;
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.brand-logo:hover .logo-icon-wrap {
+  transform: scale(1.06);
+}
+
+.brand-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
 }
 
 .brand-text {

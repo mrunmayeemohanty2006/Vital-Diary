@@ -21,7 +21,7 @@ export default function Navbar({ activePage, setActivePage }) {
           onClick={() => handleNavClick(isAuthenticated ? 'dashboard' : 'home')}
         >
           <div className="logo-icon-wrap">
-            <Activity size={22} strokeWidth={2.5} />
+            <img src="/logo.png" alt="Vital Diary Logo" className="brand-logo-img" />
           </div>
           <div className="brand-text">
             <span>Vital</span>
